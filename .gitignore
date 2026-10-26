@@ -1,0 +1,13 @@
+node_modules
+dist
+.env
+test-results
+playwright-report
+supabase/seed/users.json
+
+# local working folders (not part of the app)
+_backup_before_redesign_*/
+_to_delete/
+shots/
+test-results/
+.env.local

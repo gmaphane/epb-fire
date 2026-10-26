@@ -1,0 +1,9 @@
+[
+  { "email": "coordinator@ecoplanetbamboo.com", "password": "ChangeMe-2026!", "full_name": "Fire Coordinator (test)", "role": "coordinator" },
+  { "email": "camp.radio@ecoplanetbamboo.com", "password": "ChangeMe-2026!", "full_name": "Camp Radio Desk (test)", "role": "coordinator" },
+  { "email": "crew.b.day@ecoplanetbamboo.com", "password": "ChangeMe-2026!", "full_name": "Block B Day Lead (test)", "role": "responder", "crew": "Block B — Day" },
+  { "email": "crew.b.night@ecoplanetbamboo.com", "password": "ChangeMe-2026!", "full_name": "Block B Night Lead (test)", "role": "responder", "crew": "Block B — Night" },
+  { "email": "patrol@ecoplanetbamboo.com", "password": "ChangeMe-2026!", "full_name": "Patrol (test)", "role": "reporter" },
+  { "email": "manager@ecoplanetbamboo.com", "password": "ChangeMe-2026!", "full_name": "Manager (test)", "role": "manager" },
+  { "email": "gis.admin@ecoplanetbamboo.com", "password": "ChangeMe-2026!", "full_name": "GIS Admin (test)", "role": "admin" }
+]

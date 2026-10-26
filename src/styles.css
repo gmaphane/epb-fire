@@ -1,0 +1,100 @@
+@import 'leaflet/dist/leaflet.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+[data-theme='day'] {
+  /* Alpine Slate & Ember. Obsidian = headers/CTAs/active, ember = fire data only,
+     cobalt = GPS/routes, sage = sync, contained perimeters, GPS walk. */
+  --c-surface: 248 249 250; --c-surface-low: 241 245 249; --c-surface-mid: 226 232 240; --c-card: 255 255 255;
+  --c-sc: 241 245 249; --c-sch: 226 232 240; --c-schh: 203 213 225;
+  --c-ink: 15 23 42; --c-muted: 71 85 105; --c-faint: 148 163 184; --c-line: 226 232 240; --c-outline: 148 163 184; --c-outline-v: 203 213 225;
+  --c-brand: 15 23 42; --c-brand-deep: 15 23 42; --c-brand-c: 30 41 59; --c-on-brand: 255 255 255;
+  --c-moss: 240 253 244; --c-on-moss: 21 128 61; --c-ok: 22 163 74;
+  --c-fire: 239 68 68; --c-fire-dark: 220 38 38; --c-fire-bg: 254 242 242; --c-on-fire: 255 255 255; --c-on-fire-bg: 185 28 28;
+  --c-cobalt: 2 132 199; --c-cobalt-bg: 240 249 255;
+  --c-amber: 180 83 9; --c-amber-bg: 255 251 235;
+  --c-resp: 234 88 12; --c-resp-bg: 255 247 237;
+  --c-cont: 22 163 74; --c-cont-bg: 240 253 244;
+  --c-sat: 192 38 211; --c-sat-bg: 253 244 255;
+  --c-slate: 71 85 105; --c-inverse: 15 23 42;
+  color-scheme: light;
+}
+[data-theme='night'] {
+  --c-surface: 2 6 23; --c-surface-low: 15 23 42; --c-surface-mid: 30 41 59; --c-card: 15 23 42;
+  --c-sc: 30 41 59; --c-sch: 51 65 85; --c-schh: 71 85 105;
+  --c-ink: 241 245 249; --c-muted: 148 163 184; --c-faint: 100 116 139; --c-line: 30 41 59; --c-outline: 100 116 139; --c-outline-v: 51 65 85;
+  --c-brand: 241 245 249; --c-brand-deep: 241 245 249; --c-brand-c: 226 232 240; --c-on-brand: 15 23 42;
+  --c-moss: 5 46 22; --c-on-moss: 134 239 172; --c-ok: 74 222 128;
+  --c-fire: 248 113 113; --c-fire-dark: 239 68 68; --c-fire-bg: 69 10 10; --c-on-fire: 255 255 255; --c-on-fire-bg: 254 202 202;
+  --c-cobalt: 56 189 248; --c-cobalt-bg: 8 47 73;
+  --c-amber: 251 191 36; --c-amber-bg: 69 26 3;
+  --c-resp: 251 146 60; --c-resp-bg: 67 20 7;
+  --c-cont: 74 222 128; --c-cont-bg: 5 46 22;
+  --c-sat: 232 121 249; --c-sat-bg: 74 4 78;
+  --c-slate: 148 163 184; --c-inverse: 241 245 249;
+  color-scheme: dark;
+}
+
+html, body, #app { height: 100%; margin: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; letter-spacing: -0.005em;
+  background: rgb(var(--c-surface)); color: rgb(var(--c-ink));
+  overscroll-behavior: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.num { font-variant-numeric: tabular-nums; }
+.pt-safe { padding-top: env(safe-area-inset-top, 0); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0); }
+button { font: inherit; }
+button:disabled { opacity: .5; }
+:focus-visible { outline: 3px solid rgb(var(--c-brand)); outline-offset: 2px; }
+
+.leaflet-container { background: rgb(var(--c-surface-mid)); font-family: inherit; }
+/* Muted, slightly cool imagery so compartments and fire data read on top */
+.basemap-satellite .leaflet-tile-pane { filter: saturate(.55) brightness(.82) contrast(1.05); }
+.basemap-street .leaflet-tile-pane { filter: saturate(.35) contrast(.95); }
+[data-theme='night'] .basemap-satellite .leaflet-tile-pane { filter: saturate(.45) brightness(.55) contrast(1.1); }
+[data-theme='night'] .basemap-street .leaflet-tile-pane { filter: invert(.92) hue-rotate(180deg) saturate(.3) brightness(.9); }
+.leaflet-control-attribution { font-size: 9px; opacity: .7; }
+.pin { display: flex; align-items: center; justify-content: center; border-radius: 9999px; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.pulse { animation: pulse 1.6s ease-out infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,.55); } 100% { box-shadow: 0 0 0 18px rgba(239,68,68,0); } }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } * { scroll-behavior: auto !important; } }
+.me-wrap { position: relative; width: 28px; height: 28px; }
+.me-ping { position: absolute; inset: -6px; border-radius: 9999px; background: rgba(2,132,199,.18); animation: ping 1.8s cubic-bezier(0,0,.2,1) infinite; }
+.me-halo { position: absolute; inset: 0; border-radius: 9999px; background: rgba(2,132,199,.22); display: flex; align-items: center; justify-content: center; }
+.me-dot { width: 14px; height: 14px; border-radius: 9999px; background: #0284C7; box-shadow: 0 0 8px rgba(2,132,199,.6); border: 2px solid #fff; }
+.me-cone { position: absolute; left: 50%; top: -9px; margin-left: -5px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid rgba(2,132,199,.7); transform-origin: 5px 23px; }
+@keyframes ping { 75%, 100% { transform: scale(1.6); opacity: 0; } }
+.callout { display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%); white-space: nowrap; cursor: pointer; }
+.callout-body { display: flex; align-items: center; gap: 6px; background: rgb(var(--c-card)); color: rgb(var(--c-ink)); padding: 6px 10px; border-radius: 9999px; box-shadow: 0 4px 14px rgba(15,23,42,.12); font: 600 12px/16px inherit; }
+.callout-body.big { border-radius: 12px; padding: 6px 10px 6px 6px; box-shadow: 0 6px 18px rgba(15,23,42,.14); }
+.callout-tip { width: 9px; height: 9px; background: rgb(var(--c-card)); transform: rotate(45deg); margin-top: -5px; box-shadow: 2px 2px 3px rgba(15,23,42,.06); }
+.callout-base { width: 8px; height: 8px; border-radius: 9999px; margin-top: 2px; border: 1.5px solid #fff; }
+.callout-ico { width: 22px; height: 22px; border-radius: 9999px; background: rgb(var(--c-sc)); display: flex; align-items: center; justify-content: center; }
+.callout-ico.sq { width: 34px; height: 34px; border-radius: 8px; }
+.callout .sub { font-size: 11px; font-weight: 600; }
+.leaflet-control-scale-line { border: none; border-top: 0; background: transparent; color: rgb(var(--c-muted)); font: 600 10px inherit; padding: 0 0 4px; border-bottom: 4px solid rgb(var(--c-ink)); line-height: 12px; }
+.leaflet-control-scale { background: rgb(var(--c-card) / .85); padding: 6px 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1); margin: 0 0 12px 14px !important; }
+.leaflet-tooltip.vtx { background: rgb(var(--c-card)); border: 0; border-radius: 9999px; box-shadow: 0 6px 16px rgba(0,0,0,.15); font: 600 12px inherit; padding: 6px 12px; color: rgb(var(--c-ink)); }
+.blur-bar { background: rgb(var(--c-card) / .9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+.sheet-enter { animation: up .18s ease-out; }
+@keyframes up { from { transform: translateY(24px); opacity: .0; } to { transform: none; opacity: 1; } }
+
+/* compartment code labels (high zoom) */
+.leaflet-tooltip.comp-label { background: transparent; border: 0; box-shadow: none; padding: 0; color: #fff; font: 700 11px/1 inherit; letter-spacing: .02em; text-shadow: 0 0 3px rgba(15,23,42,.9), 0 0 6px rgba(15,23,42,.6); }
+.leaflet-tooltip.comp-label::before { display: none; }
+/* live crew markers */
+.crew { position: relative; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9999px; background: #fff; box-shadow: 0 2px 8px rgba(15,23,42,.35); }
+.crew-in { width: 22px; height: 22px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: #fff; font: 700 9px/1 inherit; }
+.crew.stale { opacity: .55; filter: grayscale(.8); }
+.crew-tag { position: absolute; top: 31px; left: 50%; transform: translateX(-50%); white-space: nowrap; background: rgba(15,23,42,.85); color: #fff; font: 600 10px/1 inherit; padding: 3px 6px; border-radius: 6px; }
+/* iOS-style switch */
+.switch { position: relative; width: 44px; height: 26px; flex: none; border-radius: 9999px; background: rgb(var(--c-schh)); transition: background .18s; }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 9999px; background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.3); transition: transform .18s; }
+.switch[aria-checked='true'] { background: rgb(var(--c-brand)); }
+[data-theme='night'] .switch[aria-checked='true'] { background: rgb(var(--c-ok)); }
+.switch[aria-checked='true']::after { transform: translateX(18px); }
+.route-glow { filter: drop-shadow(0 0 4px rgba(2,132,199,.6)); }
