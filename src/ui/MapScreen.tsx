@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { BellRing, ChevronDown, ClipboardList, Copy, Flame, Footprints, Layers, LocateFixed, Navigation, Radio, Ruler, Satellite, Search, Truck, Users, X } from 'lucide-preact';
+import { BellRing, ChevronDown, Download, ClipboardList, Copy, Flame, Footprints, Layers, LocateFixed, Navigation, Radio, Ruler, Satellite, Search, Truck, Users, X } from 'lucide-preact';
 import L from 'leaflet';
 import { getState, setState, toast, useStore } from '../core/store';
 import { gps } from '../core/gps';
@@ -17,6 +17,7 @@ import type { Incident } from '../core/types';
 import { compass8, useWeather, wxAge, type Weather } from '../core/weather';
 import { spreadEllipse, threats, THREAT_LABEL, type Threat } from '../core/spread';
 import { enablePush, pushState, type PushState } from '../core/push';
+import { promptInstall, useInstall } from '../core/install';
 import type { FireDanger } from '../core/types';
 
 /** The few layers people actually switch. Hazards are always shown; everything else stays in the data. */
@@ -179,9 +180,9 @@ export function MapScreen() {
         </div>
         {/* status pills */}
         <div class="absolute left-3 z-[1000] flex flex-col items-start gap-1.5 pointer-events-none" style={top(72)}>
-          {wx && <WxChip w={wx} />}
-          <DangerPill rows={s.fireDanger} />
+          <Conditions rows={s.fireDanger} wx={wx} />
           <AlertsNudge />
+          <InstallNudge />
           {s.readiness && s.readiness.level !== 'green' && (
             <span data-testid="readiness-banner" class={cx('px-2.5 py-1 rounded-pill text-[11px] font-semibold shadow-sm', s.readiness.level === 'red' ? 'bg-fire-bg text-on-fire-bg' : 'bg-amber-bg text-amber')}>Readiness {s.readiness.level.toUpperCase()}{s.readiness.note ? ` · ${s.readiness.note}` : ''}</span>
           )}
@@ -358,21 +359,6 @@ function IncidentCard({ inc, r, mode, setMode, crews, onClose, sharingFor, wx, t
 }
 
 
-/** Wind (arrow points where it blows TO), gusts, temperature, humidity. */
-function WxChip({ w }: { w: Weather }) {
-  const age = wxAge(w);
-  return (
-    <span data-testid="wx-chip" class="px-2.5 py-1.5 rounded-pill text-[12px] font-semibold bg-card/90 backdrop-blur-xl shadow-capsule flex items-center gap-1.5 num">
-      <WindArrow from={w.windFrom} />
-      <span>{compass8(w.windFrom)} {Math.round(w.windKmh)} km/h</span>
-      {w.gustKmh != null && <span class="text-muted font-medium">gust {Math.round(w.gustKmh)}</span>}
-      <span class="w-1 h-1 rounded-full bg-faint" />
-      <span>{Math.round(w.tempC)}°C</span>
-      <span class={cx('font-medium', w.rh < 30 ? 'text-fire-dark' : 'text-muted')}>RH {Math.round(w.rh)}%</span>
-      {age > 60 && <span class="text-amber font-medium">· {age >= 120 ? `${Math.round(age / 60)} h` : `${age} min`} old</span>}
-    </span>
-  );
-}
 const WindArrow = ({ from, size = 16 }: { from: number; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" style={{ transform: `rotate(${(from + 180) % 360}deg)` }} aria-label={`Wind from ${Math.round(from)}°`}>
     <path d="M12 21V5" stroke="#0284C7" stroke-width="2.6" stroke-linecap="round" />
@@ -438,30 +424,6 @@ const DANGER_ACTION: Record<string, string> = {
   extreme: 'Maximum readiness: all crews on standby, vehicles fuelled, community warned.',
 };
 
-/** Today's fire danger rating (computed on the server each morning at 05:45). */
-function DangerPill({ rows }: { rows: FireDanger[] }) {
-  const [open, setOpen] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
-  const yest = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
-  const d = rows.find((r) => r.id === today) ?? rows.find((r) => r.id === yest);
-  if (!d) return null;
-  const stale = d.id !== today;
-  return (
-    <div class="pointer-events-auto flex flex-col items-start gap-1.5">
-      <button data-testid="danger-pill" onClick={() => setOpen((v) => !v)} class={cx('px-2.5 py-1.5 rounded-pill text-[12px] font-semibold shadow-capsule flex items-center gap-1.5', DANGER_STYLE[d.level])}>
-        <Flame size={13} fill="currentColor" />Fire danger: {DANGER_LABEL[d.level].toUpperCase()}{stale && <span class="font-normal opacity-80"> · yesterday</span>}
-      </button>
-      {open && (
-        <div class="bg-card/95 backdrop-blur-xl rounded-2xl shadow-sheet p-3 w-[264px] text-[12px] space-y-1.5 sheet-enter" data-testid="danger-detail">
-          <div class="text-[13px] font-semibold">{DANGER_ACTION[d.level]}</div>
-          <div class="text-muted num">Today max {d.temp_max_c != null ? Math.round(d.temp_max_c) : '—'}°C · min humidity {d.rh_min_pct ?? '—'}% · wind up to {d.wind_max_kmh ?? '—'} km/h{d.wind_from_deg != null ? ` from ${compass8(d.wind_from_deg)}` : ''}</div>
-          <div class="text-muted">{d.days_since_rain != null ? (d.days_since_rain === 0 ? 'Rain yesterday' : `No rain for ${d.days_since_rain >= 14 ? '14+' : d.days_since_rain} day${d.days_since_rain > 1 ? 's' : ''}`) : ''}{d.rain_24h_mm ? ` · ${d.rain_24h_mm} mm in last 24 h` : ''}</div>
-          <div class="text-[10px] text-faint leading-snug">Based on the afternoon forecast (temperature, humidity, wind) and days since rain. {d.basis}</div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 /** One-tap prompt to turn on push alerts on this phone (hidden once on, in demo, or unsupported). */
 function AlertsNudge() {
@@ -487,4 +449,47 @@ function AlertsNudge() {
 function LiveSyncChip() {
   const sync = useStore((x) => x.sync);
   return <SyncChip s={sync} onClick={() => go('sync')} />;
+}
+
+/** Suggest installing the app (full screen, no browser bar). Hidden once installed or dismissed. */
+function InstallNudge() {
+  const mode = useInstall();
+  const [hidden, setHidden] = useState(() => { try { return localStorage.getItem('epb-install-dismissed') === '1'; } catch { return false; } });
+  if (!mode || hidden) return null;
+  const dismiss = () => { setHidden(true); try { localStorage.setItem('epb-install-dismissed', '1'); } catch { /* ignore */ } };
+  return (
+    <span class="pointer-events-auto flex items-center rounded-pill bg-[#0F172A] text-white shadow-capsule text-[12px] font-semibold" data-testid="install-nudge">
+      <button class="pl-2.5 pr-1.5 py-1.5 flex items-center gap-1.5" onClick={async () => {
+        if (mode === 'prompt') { if (await promptInstall()) toast('Installed. Open EPB Fire from your home screen.'); }
+        else toast('On iPhone: tap Share, then "Add to Home Screen".', 'warn');
+      }}><Download size={13} />Install app (full screen)</button>
+      <button aria-label="Dismiss" class="pr-2 pl-1 py-1.5 opacity-70" onClick={dismiss}><X size={13} /></button>
+    </span>
+  );
+}
+
+/** One chip for conditions: today's fire danger + current wind and temperature. Tap for details. */
+function Conditions({ rows, wx }: { rows: FireDanger[]; wx: Weather | null }) {
+  const [open, setOpen] = useState(false);
+  const today = new Date().toISOString().slice(0, 10);
+  const yest = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  const d = rows.find((r) => r.id === today) ?? rows.find((r) => r.id === yest);
+  if (!d && !wx) return null;
+  const age = wx ? wxAge(wx) : 0;
+  return (
+    <div class="pointer-events-auto flex flex-col items-start gap-1.5">
+      <button data-testid="conditions" onClick={() => setOpen((v) => !v)} class="rounded-pill shadow-capsule flex items-stretch overflow-hidden text-[12px] font-semibold num bg-card/90 backdrop-blur-xl">
+        {d && <span data-testid="danger-pill" class={cx('px-2.5 py-1.5 flex items-center gap-1', DANGER_STYLE[d.level])}><Flame size={12} fill="currentColor" />{DANGER_LABEL[d.level].toUpperCase()}</span>}
+        {wx && <span data-testid="wx-chip" class="px-2.5 py-1.5 flex items-center gap-1.5"><WindArrow from={wx.windFrom} size={14} />{compass8(wx.windFrom)} {Math.round(wx.windKmh)} km/h<span class="text-muted font-medium">· {Math.round(wx.tempC)}°C</span>{age > 60 && <span class="text-amber font-medium">· old</span>}</span>}
+      </button>
+      {open && (
+        <div class="bg-card/95 backdrop-blur-xl rounded-2xl shadow-sheet p-3 w-[272px] text-[12px] space-y-1.5 sheet-enter" data-testid="danger-detail">
+          {d && <div class="text-[13px] font-semibold">Fire danger {DANGER_LABEL[d.level].toLowerCase()}{d.id !== today ? ' (yesterday)' : ''}: {DANGER_ACTION[d.level]}</div>}
+          {wx && <div class="text-muted num">Now: wind {compass8(wx.windFrom)} {Math.round(wx.windKmh)} km/h{wx.gustKmh != null ? `, gusts ${Math.round(wx.gustKmh)}` : ''} · {Math.round(wx.tempC)}°C · humidity <span class={wx.rh < 30 ? 'text-fire-dark font-semibold' : ''}>{Math.round(wx.rh)}%</span>{age > 60 ? ` · reading ${age >= 120 ? `${Math.round(age / 60)} h` : `${age} min`} old` : ''}</div>}
+          {d && <div class="text-muted num">Today: max {d.temp_max_c != null ? Math.round(d.temp_max_c) : '—'}°C, min humidity {d.rh_min_pct ?? '—'}%, wind up to {d.wind_max_kmh ?? '—'} km/h{d.days_since_rain != null ? ` · ${d.days_since_rain === 0 ? 'rain yesterday' : `no rain for ${d.days_since_rain >= 14 ? '14+' : d.days_since_rain} days`}` : ''}</div>}
+          {d && <div class="text-[10px] text-faint leading-snug">Rating from the afternoon forecast and days since rain. {d.basis}</div>}
+        </div>
+      )}
+    </div>
+  );
 }

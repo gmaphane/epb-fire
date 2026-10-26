@@ -1,3 +1,4 @@
+import './core/install'; // capture the install prompt as early as possible
 import { render } from 'preact';
 import { registerSW } from 'virtual:pwa-register';
 import './styles.css';

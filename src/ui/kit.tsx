@@ -138,7 +138,6 @@ export function AppBar(p: { title: string; sub?: string; back?: () => void; righ
           {p.right}
           {!p.back && <button aria-label="Search" data-testid="appbar-search" onClick={() => setState({ overlay: 'search' })} class="w-11 h-11 flex items-center justify-center rounded-full text-muted"><Search size={22} /></button>}
           <button aria-label="Status and info" data-testid="appbar-info" onClick={() => setState({ overlay: 'info' })} class="w-11 h-11 flex items-center justify-center rounded-full text-muted"><Info size={22} /></button>
-          {!p.back && <a href="#/sync" aria-label="Account and sync" class="w-8 h-8 rounded-full bg-brand flex items-center justify-center shrink-0 ml-1 text-on-brand"><User size={18} /></a>}
         </div>
       </div>
     </header>

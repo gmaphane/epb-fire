@@ -455,9 +455,9 @@ export class MapController {
   extra(): L.LayerGroup {
     return this.g.extra;
   }
-  fit(pts: [number, number][], pad = 60) {
+  fit(pts: [number, number][], pad = 60, extra?: { top?: number; bottom?: number }) {
     if (!pts.length) return;
-    this.map.fitBounds(L.latLngBounds(pts), { padding: [pad, pad], maxZoom: 17 });
+    this.map.fitBounds(L.latLngBounds(pts), { paddingTopLeft: [pad, pad + (extra?.top ?? 0)], paddingBottomRight: [pad, pad + (extra?.bottom ?? 0)], maxZoom: 17 });
   }
   destroy() {
     this.map.remove();

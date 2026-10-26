@@ -165,7 +165,7 @@ export function App() {
     default: screen = <MapScreen />;
   }
   // Report Fire is always ≤ 1 tap away (FR-REP-01). On the map it sits under the tool rail; elsewhere above the nav.
-  const showFab = !['report', 'perimeter', 'dispatch'].includes(r);
+  const showFab = !['report', 'perimeter', 'dispatch', 'navigate', 'admin'].includes(r);
   const onMap = !['incidents', 'incident', 'crews', 'sync', 'admin', 'navigate', 'perimeter', 'report', 'dispatch'].includes(r);
 
   return (

@@ -14,6 +14,8 @@ export default defineConfig({
         description: 'Fire prediction, detection, response and recording for EcoPlanet Bamboo',
         theme_color: '#0F172A',
         background_color: '#F8F9FA',
+        id: '/',
+        scope: '/',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
