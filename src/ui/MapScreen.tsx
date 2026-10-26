@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { BellRing, ChevronDown, Download, ClipboardList, Copy, Flame, Footprints, Layers, LocateFixed, Navigation, Radio, Ruler, Satellite, Search, Truck, Users, X } from 'lucide-preact';
+import { BellRing, ChevronDown, Download, ClipboardList, Flame, Layers, LocateFixed, MapPin, MoreHorizontal, Navigation, Radio, Ruler, Satellite, Search, Trash2, Users, X } from 'lucide-preact';
 import L from 'leaflet';
 import { getState, setState, toast, useStore } from '../core/store';
 import { gps } from '../core/gps';
 import { CONFIG } from '../config';
 import { MapController, RISK, type RouteLine } from './mapview';
 import { Button, CoordReadout, NorthDial, RailButton, SatChip, StatusChip, SyncChip, cx } from './kit';
-import { cardinal, fmtDistance, fmtHa, haversineM } from '../core/geo';
+import { cardinal, fmtDistance, haversineM, toUtm30 } from '../core/geo';
+import { deleteIncident, moveIncident } from '../core/actions';
 import { ago } from '../core/time';
 import { go, useGpsFix } from './hooks';
 import { isOpen } from '../core/flow';
@@ -59,6 +60,9 @@ export function MapScreen() {
   const [presenceMenu, setPresenceMenu] = useState(false);
   const [mode, setMode] = useState<Mode>('drive');
   const [measure, setMeasure] = useState<[number, number][] | null>(null);
+  const [moving, setMoving] = useState<string | null>(null); // incident whose pin is being moved
+  const [moveTo, setMoveTo] = useState<[number, number] | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const followed = useRef(false);
 
   const closeAll = () => { setSel(null); setSelDet(null); setSheet('closed'); setPresenceMenu(false); };
@@ -96,13 +100,19 @@ export function MapScreen() {
     const c = ctl.current!;
     const grp = c.extra();
     grp.clearLayers();
+    if (moving) {
+      // move-pin mode: the next tap chooses the new position (confirmed in the banner)
+      c.onClick((lat, lon) => { c.map.closePopup(); setMoveTo([lat, lon]); });
+      if (moveTo) L.circleMarker(moveTo, { radius: 10, color: '#fff', weight: 3, fillColor: '#EF4444', fillOpacity: 1 }).addTo(grp);
+      return;
+    }
     if (measure === null) { c.onClick(() => { closeAll(); setPanel(false); }); return; }
     c.onClick((lat, lon) => { c.map.closePopup(); setMeasure((m) => [...(m ?? []), [lat, lon]]); });
     if (measure.length) {
       L.polyline(measure, { color: '#0F172A', weight: 3, dashArray: '6 4' }).addTo(grp);
       measure.forEach((p) => L.circleMarker(p, { radius: 4, color: '#fff', weight: 2, fillColor: '#0F172A', fillOpacity: 1 }).addTo(grp));
     }
-  }, [measure]);
+  }, [measure, moving, moveTo]);
   const measureM = measure ? measure.reduce((t, p, i) => (i ? t + haversineM(measure[i - 1][0], measure[i - 1][1], p[0], p[1]) : 0), 0) : 0;
 
   const here = g.fix;
@@ -187,6 +197,13 @@ export function MapScreen() {
             <span data-testid="readiness-banner" class={cx('px-2.5 py-1 rounded-pill text-[11px] font-semibold shadow-sm', s.readiness.level === 'red' ? 'bg-fire-bg text-on-fire-bg' : 'bg-amber-bg text-amber')}>Readiness {s.readiness.level.toUpperCase()}{s.readiness.note ? ` · ${s.readiness.note}` : ''}</span>
           )}
           {s.compartments.some((c) => c.code.startsWith('DEMO')) && <span class="px-2.5 py-1 rounded-pill text-[10px] font-semibold bg-card/90 text-muted shadow-sm">Demo data</span>}
+          {moving && (
+            <span class="pointer-events-auto bg-[#0F172A] text-white rounded-2xl shadow-capsule px-3 py-2 flex items-center gap-2 text-[13px]" data-testid="move-banner">
+              <MapPin size={15} />{moveTo ? 'Move the fire here?' : 'Tap the map where the fire is'}
+              {moveTo && <button data-testid="move-confirm" class="ml-1 px-2.5 py-1 rounded-lg bg-[#EF4444] font-semibold" onClick={() => void moveIncident(moving, moveTo[0], moveTo[1]).then(() => { toast('Location corrected'); setMoving(null); setMoveTo(null); }).catch((e) => toast((e as Error).message, 'err'))}>Move</button>}
+              <button class="px-2 py-1 rounded-lg bg-white/15 font-semibold" onClick={() => { setMoving(null); setMoveTo(null); }}>Cancel</button>
+            </span>
+          )}
           {measure !== null && (
             <span class="pointer-events-auto bg-card rounded-pill shadow-capsule pl-3 pr-1.5 py-1 flex items-center gap-2">
               <Ruler size={14} /><span class="font-semibold num text-[13px]" data-testid="measure-out">{fmtDistance(measureM)}</span>
@@ -204,6 +221,7 @@ export function MapScreen() {
           <RailButton label="Measure distance" testid="rail-measure" tone="text-muted" active={measure !== null} onClick={() => setMeasure((m) => (m === null ? [] : null))}><Ruler size={19} /></RailButton>
         </div>
 
+        {deleting && <DeleteSheet id={deleting} onClose={() => setDeleting(null)} onDone={() => { setDeleting(null); setSel(null); }} />}
         {panel && (
           <div class="absolute right-[64px] z-[1001] w-[252px] bg-card/95 backdrop-blur-xl rounded-2xl shadow-sheet p-2 sheet-enter" style={top(12)} data-testid="layers-panel">
             <div class="flex items-center justify-between px-2 pt-1 pb-2">
@@ -235,7 +253,7 @@ export function MapScreen() {
         {/* Bottom: compact pills by default; a card only when something is selected */}
         <div class="absolute left-3 right-[72px] bottom-3 z-[1000] flex flex-col gap-2 items-start" data-testid="map-sheet">
           {inc ? (
-            <IncidentCard inc={inc} r={routes.get(inc.id)} mode={mode} setMode={setMode} crews={crewsFor(inc.id).length} onClose={() => setSel(null)} sharingFor={sharing && pr!.incident_id === inc.id ? pr!.status : null} wx={target?.id === inc.id ? wx : null} threats={target?.id === inc.id ? threatList : []} />
+            <IncidentCard inc={inc} r={routes.get(inc.id)} role={s.me?.role} onClose={() => setSel(null)} sharingFor={sharing && pr!.incident_id === inc.id ? pr!.status : null} wx={target?.id === inc.id ? wx : null} threats={target?.id === inc.id ? threatList : []} onMove={() => { setMoving(inc.id); setMoveTo(null); setSel(null); }} onDelete={() => setDeleting(inc.id)} />
           ) : det ? (
             <div class="w-full bg-card/95 backdrop-blur-xl rounded-2xl shadow-sheet p-4 flex flex-col gap-3 sheet-enter">
               <div class="flex items-start justify-between gap-2">
@@ -311,53 +329,65 @@ export function MapScreen() {
   );
 }
 
-function IncidentCard({ inc, r, mode, setMode, crews, onClose, sharingFor, wx, threats: th }: { inc: Incident; r?: Route; mode: Mode; setMode: (m: Mode) => void; crews: number; onClose: () => void; sharingFor: string | null; wx: Weather | null; threats: Threat[] }) {
+function IncidentCard({ inc, r, onClose, sharingFor, wx, threats: th, role, onMove, onDelete }: { inc: Incident; r?: Route; onClose: () => void; sharingFor: string | null; wx: Weather | null; threats: Threat[]; role?: string; onMove: () => void; onDelete: () => void }) {
   const open = isOpen(inc.status);
+  const [menu, setMenu] = useState(false);
+  const inside = !inc.compartment ? th.find((t) => t.level === 'burning') : null;
+  const near = !inc.compartment && !inside ? th.find((t) => t.level !== 'burning') : null;
+  const title = inc.compartment ?? inside?.code ?? (near && near.distM < 2000 ? `Near ${near.code}` : inc.block ?? 'Unmapped area');
+  const canMove = role === 'responder' || role === 'coordinator' || role === 'admin';
+  const canDelete = role === 'coordinator' || role === 'admin';
   return (
-    <div class="w-full max-h-[64vh] overflow-y-auto bg-card/95 backdrop-blur-xl rounded-2xl shadow-sheet p-4 flex flex-col gap-3 sheet-enter" data-testid="incident-sheet">
-      <div class="flex items-start justify-between gap-2">
-        <div class="flex flex-col min-w-0">
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <span class="text-[17px] font-semibold tracking-[-.01em] leading-snug">{inc.compartment ?? inc.block ?? 'Unmapped area'}</span>
+    <div class="w-full max-h-[60vh] overflow-y-auto bg-card/95 backdrop-blur-xl rounded-2xl shadow-sheet p-4 flex flex-col gap-3 sheet-enter" data-testid="incident-sheet">
+      <div class="flex items-start gap-2">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-[18px] font-semibold tracking-[-.01em] leading-tight truncate">{title}</span>
             <StatusChip s={inc.status} short />
           </div>
-          <p class="text-[12px] text-muted mt-0.5 truncate">{inc.code ?? inc.label} · {ago(inc.reported_at)} · {inc.reported_by_name}</p>
+          <p class="text-[12px] text-muted mt-0.5 truncate">{inc.code ?? inc.label} · {ago(inc.reported_at)}</p>
         </div>
+        {(canMove || canDelete) && (
+          <div class="relative shrink-0">
+            <button aria-label="More actions" data-testid="incident-menu" class="w-8 h-8 rounded-full bg-sc flex items-center justify-center text-muted" onClick={() => setMenu((v) => !v)}><MoreHorizontal size={16} /></button>
+            {menu && (
+              <div class="absolute right-0 top-9 z-10 w-48 bg-card rounded-xl shadow-sheet border border-line overflow-hidden text-[14px]">
+                {canMove && <button data-testid="move-pin" class="w-full text-left px-3 py-2.5 flex items-center gap-2 active:bg-surface-low" onClick={() => { setMenu(false); onMove(); }}><MapPin size={16} />Move pin</button>}
+                {canDelete && <button data-testid="delete-incident" class="w-full text-left px-3 py-2.5 flex items-center gap-2 text-fire-dark active:bg-surface-low border-t border-line" onClick={() => { setMenu(false); onDelete(); }}><Trash2 size={16} />Delete report</button>}
+              </div>
+            )}
+          </div>
+        )}
         <button aria-label="Close" class="w-8 h-8 rounded-full bg-sc flex items-center justify-center text-muted shrink-0" onClick={onClose}><X size={16} /></button>
       </div>
-      <CoordReadout lat={inc.lat} lon={inc.lon} compact testid="card-coords" />
-      {open && r && (
-        <div class="flex items-center gap-3 rounded-xl bg-cobalt-bg px-3 py-2.5" data-testid="route-summary">
-          <Navigation size={18} class="text-cobalt shrink-0" />
-          <div class="flex-1 min-w-0">
-            <div class="text-[17px] font-semibold num text-cobalt leading-tight">{fmtEta(r.etaMin)} <span class="text-[13px] font-medium text-muted">· {fmtDistance(r.distM)}</span></div>
-            <div class="text-[11px] text-muted truncate">From your position · {r.viaTracks ? `${mode === 'drive' ? 'by road' : 'by road/firebreak'}${r.offRoadM > 40 ? `, last ${fmtDistance(r.offRoadM)} on foot` : ''}` : 'straight line on foot'}</div>
-          </div>
-          <div class="flex p-0.5 bg-card rounded-[9px] shrink-0">
-            {(['drive', 'walk'] as const).map((m) => (
-              <button key={m} aria-label={m === 'drive' ? 'Vehicle' : 'On foot'} aria-pressed={mode === m} onClick={() => setMode(m)} class={cx('w-8 h-7 rounded-[7px] flex items-center justify-center', mode === m ? 'bg-brand text-on-brand' : 'text-muted')}>{m === 'drive' ? <Truck size={15} /> : <Footprints size={15} />}</button>
-            ))}
-          </div>
-        </div>
-      )}
+
+      <CoordLine lat={inc.lat} lon={inc.lon} />
+
       <div class="flex items-center gap-2">
         {open && (sharingFor
-          ? <Button kind="primary" class="flex-1 !min-h-[44px]" icon={<Navigation size={17} />} testid="navigate" onClick={() => go('navigate/incident/' + inc.id)}>Navigate</Button>
-          : <Button kind="primary" class="flex-1 !min-h-[44px]" icon={<Navigation size={17} />} testid="respond" onClick={() => void setPresence('en_route', inc.id).then(() => { toast('Responding: control can see your location.'); go('navigate/incident/' + inc.id); })}>Respond</Button>)}
-        <button aria-label="Details" class="w-11 h-11 bg-sc text-ink rounded-xl flex items-center justify-center shrink-0" onClick={() => go('incident/' + inc.id)}><ClipboardList size={18} /></button>
+          ? <Button kind="primary" class="flex-1 !min-h-[48px]" icon={<Navigation size={17} />} testid="navigate" onClick={() => go('navigate/incident/' + inc.id)}>Navigate{r ? ` · ${fmtEta(r.etaMin)}` : ''}</Button>
+          : <Button kind="primary" class="flex-1 !min-h-[48px]" icon={<Navigation size={17} />} testid="respond" onClick={() => void setPresence('en_route', inc.id).then(() => { toast('Responding: control can see your location.'); go('navigate/incident/' + inc.id); })}>Respond{r ? ` · ${fmtEta(r.etaMin)}` : ''}</Button>)}
+        <button aria-label="Fire details" class={cx('h-12 rounded-xl bg-sc text-ink flex items-center justify-center shrink-0 gap-1.5 text-[14px] font-semibold', open ? 'w-12' : 'flex-1')} onClick={() => go('incident/' + inc.id)}><ClipboardList size={18} />{!open && 'Details'}</button>
       </div>
-      {open && !sharingFor && <div class="text-[11px] text-muted -mt-1 px-0.5">Respond = go to this fire: opens the route and shares your live location with control.</div>}
-      {open && sharingFor && <div class="text-[11px] text-cobalt -mt-1 px-0.5 flex items-center justify-between">You are responding · location shared <button class="font-semibold text-muted" onClick={() => void stopResponding().then(() => toast('Stopped responding.'))}>Stop</button></div>}
-      <div class="flex items-center gap-3 text-[12px] text-muted num px-0.5">
-        <span>Block <b class="text-ink font-semibold">{inc.block?.replace('Block ', '') ?? '—'}</b></span>
-        <span>Area <b class="text-ink font-semibold">{inc.area_ha != null ? `${fmtHa(inc.area_ha)} ha` : '—'}</b></span>
-        <span>Crews live <b class={cx('font-semibold', crews ? 'text-cobalt' : 'text-ink')}>{crews}</b></span>
-      </div>
+      {open && sharingFor && <div class="text-[12px] text-cobalt -mt-1 flex items-center justify-between">You are responding · location shared <button class="font-semibold text-muted" onClick={() => void stopResponding().then(() => toast('Stopped responding.'))}>Stop</button></div>}
+
       {open && <SpreadPanel wx={wx} th={th} />}
     </div>
   );
 }
 
+/** Fire position in one tap-to-copy line (decimal degrees), UTM underneath for radio read-out. */
+function CoordLine({ lat, lon }: { lat: number; lon: number }) {
+  const u = toUtm30(lat, lon);
+  const g3 = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return (
+    <button data-testid="card-coords" aria-label="Copy coordinates" class="w-full text-left rounded-xl bg-[#0F172A] text-white px-3.5 py-2 active:opacity-90"
+      onClick={() => { void navigator.clipboard?.writeText(`${lat.toFixed(5)}, ${lon.toFixed(5)} | UTM 30N ${g3(u.e)} E ${g3(u.n)} N`); toast('Coordinates copied'); }}>
+      <div class="font-mono text-[18px] font-semibold num whitespace-nowrap">{Math.abs(lat).toFixed(5)}° {lat >= 0 ? 'N' : 'S'}  {Math.abs(lon).toFixed(5)}° {lon >= 0 ? 'E' : 'W'}</div>
+      <div class="font-mono text-[13px] text-white/70 num whitespace-nowrap">UTM 30N {g3(u.e)} E {g3(u.n)} N</div>
+    </button>
+  );
+}
 
 const WindArrow = ({ from, size = 16 }: { from: number; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" style={{ transform: `rotate(${(from + 180) % 360}deg)` }} aria-label={`Wind from ${Math.round(from)}°`}>
@@ -369,44 +399,35 @@ const WindArrow = ({ from, size = 16 }: { from: number; size?: number }) => (
 const LEVEL_STYLE: Record<string, string> = { burning: 'bg-[#DC2626] text-white', very_high: 'bg-fire-bg text-on-fire-bg', high: 'bg-fire-bg text-on-fire-bg', moderate: 'bg-amber-bg text-amber', low: 'bg-sc text-muted' };
 const fmtMin = (m: number) => (m < 1 ? 'now' : m < 60 ? `~${Math.round(m)} min` : m < 600 ? `~${(m / 60).toFixed(1)} h` : '>10 h');
 
-/** Which compartments the fire could reach first if the current wind holds (wind direction and speed only). */
+/** Which compartments the fire could reach first if the wind holds. One summary line; tap for the list. */
 function SpreadPanel({ wx, th }: { wx: Weather | null; th: Threat[] }) {
-  const [all, setAll] = useState(false);
+  const [openList, setOpenList] = useState(false);
   const list = th.filter((t) => t.level !== 'low');
-  const shown = all ? list : list.slice(0, 4);
+  if (!list.length) return null;
+  const first = list.find((t) => t.level !== 'burning') ?? list[0];
   return (
-    <div class="rounded-xl bg-surface-low px-3 py-2.5 space-y-2" data-testid="spread-panel">
-      <div class="flex items-center justify-between gap-2 text-[12px]">
-        <span class="font-semibold text-ink">Compartments at risk</span>
-        {wx
-          ? <span class="flex items-center gap-1 text-muted num"><WindArrow from={wx.windFrom} size={13} />Wind {compass8(wx.windFrom)} {Math.round(wx.windKmh)} km/h</span>
-          : <span class="text-amber">No wind data · distance only</span>}
-      </div>
-      {shown.length ? (
-        <div class="divide-y divide-line">
-          {shown.map((t) => (
+    <div class="rounded-xl bg-surface-low" data-testid="spread-panel">
+      <button class="w-full flex items-center gap-2 px-3 py-2.5 text-left" onClick={() => setOpenList((v) => !v)} data-testid="spread-summary">
+        <span class={cx('px-1.5 py-0.5 rounded-md text-[10px] font-semibold shrink-0', LEVEL_STYLE[first.level])}>{THREAT_LABEL[first.level]}</span>
+        <span class="flex-1 min-w-0 text-[13px] truncate">
+          <b>{first.code}</b>{first.young ? ' (young)' : ''} {first.level === 'burning' ? 'is burning' : `in ${fmtMin(first.etaMin!)}`}
+          {list.length > 1 && <span class="text-muted"> · +{list.length - 1} more</span>}
+        </span>
+        {wx && <span class="flex items-center gap-0.5 text-[11px] text-muted num shrink-0"><WindArrow from={wx.windFrom} size={12} />{Math.round(wx.windKmh)}</span>}
+        <ChevronDown size={16} class={cx('text-muted shrink-0 transition-transform', openList && 'rotate-180')} />
+      </button>
+      {openList && (
+        <div class="px-3 pb-2.5 divide-y divide-line">
+          {list.map((t) => (
             <div key={t.id} class="py-1.5 flex items-center gap-2" data-testid="threat-row">
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-1.5">
-                  <span class="text-[14px] font-semibold whitespace-nowrap">{t.code}</span>
-                  {t.yop == null
-                    ? <span class="text-[10px] text-faint">no planting record</span>
-                    : t.young
-                      ? <span class="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-fire-bg text-on-fire-bg whitespace-nowrap">Young bamboo · {t.yop}</span>
-                      : <span class="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-sc text-muted whitespace-nowrap">Bamboo · {t.yop}</span>}
-                </div>
-                <div class="text-[12px] text-muted num truncate">{t.level === 'burning' ? 'Fire is inside this compartment' : `${fmtDistanceShort(t.distM)} ${cardinal(t.bearing)} of the fire${t.downwind ? ' · downwind' : ''}`}</div>
-              </div>
-              <div class="text-right shrink-0">
-                <div class="text-[14px] font-semibold num">{t.level === 'burning' ? 'Now' : fmtMin(t.etaMin!)}</div>
-                <span class={cx('inline-block px-1.5 py-0.5 rounded-md text-[10px] font-semibold', LEVEL_STYLE[t.level])}>{THREAT_LABEL[t.level]}</span>
-              </div>
+              <span class="text-[14px] font-semibold min-w-[48px] whitespace-nowrap shrink-0">{t.code}</span>
+              <span class="flex-1 min-w-0 text-[12px] text-muted truncate">{t.level === 'burning' ? 'fire inside' : `${fmtDistanceShort(t.distM)} ${cardinal(t.bearing)}${t.downwind ? ' · downwind' : ''}`}{t.yop != null ? ` · ${t.young ? 'young' : 'bamboo'} ${t.yop}` : ''}</span>
+              <span class="text-[13px] font-semibold num shrink-0">{t.level === 'burning' ? 'Now' : fmtMin(t.etaMin!)}</span>
             </div>
           ))}
-          {list.length > 4 && <button class="pt-1.5 text-[12px] font-semibold text-cobalt" onClick={() => setAll((v) => !v)}>{all ? 'Show fewer' : `Show all ${list.length}`}</button>}
+          <div class="pt-1.5 text-[10px] text-faint leading-snug">If the current wind{wx ? ` (${compass8(wx.windFrom)} ${Math.round(wx.windKmh)} km/h)` : ''} holds. Rough guide; confirm on the ground.</div>
         </div>
-      ) : <div class="text-[12px] text-muted">No compartment within reach in the next 3 h at this wind.</div>}
-      <div class="text-[10px] text-faint leading-snug">Time for the fire to reach each compartment if the current wind holds. Rough guide from wind direction and speed only; confirm on the ground. Young = planted in the last 3 years.</div>
+      )}
     </div>
   );
 }
@@ -490,6 +511,27 @@ function Conditions({ rows, wx }: { rows: FireDanger[]; wx: Weather | null }) {
           {d && <div class="text-[10px] text-faint leading-snug">Rating from the afternoon forecast and days since rain. {d.basis}</div>}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Confirm deleting a fire report, with a reason (kept in the fire's timeline). */
+export function DeleteSheet({ id, onClose, onDone }: { id: string; onClose: () => void; onDone: () => void }) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const REASONS = ['Duplicate report', 'Wrong location', 'Not a fire', 'Test'];
+  return (
+    <div class="absolute inset-0 z-[1500] bg-black/40 flex items-end" onClick={onClose}>
+      <div class="w-full bg-card rounded-t-3xl p-4 pb-6 space-y-3 sheet-enter" onClick={(e) => e.stopPropagation()} data-testid="delete-sheet">
+        <div class="text-[17px] font-semibold">Delete this fire report?</div>
+        <p class="text-[13px] text-muted">It disappears from every map and list. The record is kept for audit with your reason. If it was a real fire that turned out false, use “False alarm” in the fire details instead.</p>
+        <div class="flex flex-wrap gap-2">{REASONS.map((r) => <button key={r} onClick={() => setReason(r)} class={cx('px-3 h-9 rounded-pill text-[13px] font-semibold', reason === r ? 'bg-brand text-on-brand' : 'bg-sc')}>{r}</button>)}</div>
+        <input class="w-full h-11 rounded-xl bg-surface-low px-3 text-[15px] outline-none focus:ring-2 focus:ring-brand" placeholder="Or type a reason" value={reason} onInput={(e) => setReason((e.target as HTMLInputElement).value)} />
+        <div class="grid grid-cols-2 gap-2">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button kind="danger" testid="delete-confirm" disabled={busy || !reason.trim()} icon={<Trash2 size={17} />} onClick={() => { setBusy(true); void deleteIncident(id, reason).then(() => { toast('Fire report deleted'); onDone(); }).catch((e) => { toast((e as Error).message, 'err'); setBusy(false); }); }}>Delete</Button>
+        </div>
+      </div>
     </div>
   );
 }

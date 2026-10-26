@@ -72,7 +72,7 @@ export function ReportScreen({ detection }: { detection: string | null }) {
     }
   }, [pos?.lat, pos?.lon, live, mode]);
 
-  const submit = async () => {
+  const submit = async (again = false) => {
     // use the freshest best GPS fix at the moment of tapping, unless the user placed the pin
     const rec = gps.forRecord();
     const at = mode === 'manual' ? manualPos : mode === 'map' ? pin : rec.fix ? { lat: rec.fix.lat, lon: rec.fix.lon } : null;
@@ -96,6 +96,12 @@ export function ReportScreen({ detection }: { detection: string | null }) {
         observer_name: mode === 'manual' ? observer : null, relayed_via: mode === 'manual' ? via : null, observed_at: observedAt,
       });
       (window as any).__lastReportMs = Math.round(performance.now() - t0);
+      if (again) {
+        // stay here to pin the next fire
+        toast(`Fire ${inc.label} saved. Tap the map for the next one.`);
+        setNotes(''); setPhoto(null); setAck(false); setBusy(false);
+        return;
+      }
       toast(mode === 'manual' ? 'Relayed fire saved — sending to everyone when signal allows' : 'Saved on this phone — sending when signal allows');
       go('incident/' + inc.id);
     } catch (e) { toast((e as Error).message, 'err'); setBusy(false); }
@@ -183,9 +189,12 @@ export function ReportScreen({ detection }: { detection: string | null }) {
           <button aria-label="Add photo" class={cx('w-12 rounded-lg flex items-center justify-center', photo ? 'bg-moss text-on-moss' : 'bg-sc')} onClick={() => file.current?.click()}><Camera size={20} /></button>
           <input ref={file} type="file" accept="image/*" capture="environment" class="hidden" onChange={(e) => setPhoto((e.target as HTMLInputElement).files?.[0] ?? null)} />
         </div>
-        <Button kind="danger" full testid="submit-report" disabled={busy || (dups.length > 0 && !ack) || (mode === 'manual' && !manualPos)} icon={<Flame size={22} />} class="min-h-[64px] text-[18px]" onClick={() => void submit()}>
+        <Button kind="danger" full testid="submit-report" disabled={busy || (dups.length > 0 && !ack) || (mode === 'manual' && !manualPos)} icon={<Flame size={22} />} class="min-h-[64px] text-[18px]" onClick={() => void submit(false)}>
           {busy ? 'Saving…' : mode === 'manual' ? 'REPORT RELAYED FIRE' : 'REPORT FIRE'}
         </Button>
+        {mode === 'map' && !det && (
+          <Button full testid="submit-another" disabled={busy || (dups.length > 0 && !ack)} onClick={() => void submit(true)}>Save and pin another fire</Button>
+        )}
         <p class="text-[12px] text-muted text-center">Saved on this phone first. It sends by itself as soon as there is any signal.</p>
         <div class="h-8" />
       </div>

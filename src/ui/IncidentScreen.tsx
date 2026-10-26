@@ -5,6 +5,7 @@ import { getState, toast, useStore } from '../core/store';
 import { ago, hhmm } from '../core/time';
 import { fmtDd, fmtDms, fmtHa, fmtUtm } from '../core/geo';
 import { ACTIVE, allowedNext, CAUSES, can, STATUS_LABEL } from '../core/flow';
+import { DeleteSheet } from './MapScreen';
 import { Banner, Button, Card, CoordReadout, Metric, RowSyncDot, Screen, StatusChip } from './kit';
 import { back, go, useNow } from './hooks';
 import { CONFIG } from '../config';
@@ -31,6 +32,7 @@ export function IncidentScreen({ id }: { id: string }) {
   const [reason, setReason] = useState('');
   const file = useRef<HTMLInputElement>(null);
   const role = s.me?.role;
+  const [del, setDel] = useState(false);
 
   if (!inc) return <Screen title="Incident" back={back}><Banner tone="warn">This incident is not on this phone yet.</Banner></Screen>;
   const events = s.events.filter((e) => e.incident_id === id).sort((a, b) => (a.client_ts < b.client_ts ? 1 : -1));
@@ -158,6 +160,10 @@ export function IncidentScreen({ id }: { id: string }) {
           ))}
         </ol>
       </Card>
+      {(role === 'coordinator' || role === 'admin') && (
+        <button data-testid="delete-incident" class="w-full py-3 text-[14px] font-semibold text-fire-dark" onClick={() => setDel(true)}>Delete this report</button>
+      )}
+      {del && <div class="fixed inset-0 z-[2600]"><DeleteSheet id={id} onClose={() => setDel(false)} onDone={() => { setDel(false); go('incidents'); }} /></div>}
       <div class="h-24" />
     </Screen>
   );

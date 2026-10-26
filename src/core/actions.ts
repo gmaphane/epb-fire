@@ -94,6 +94,30 @@ export async function setStatus(id: string, to: IncidentStatus, extra: Partial<P
   await logEvent(id, 'status', { from: cur.status, to, ...extra });
 }
 
+/** Remove a fire report entirely (duplicate, test or wrong). Coordinators and admins; kept on the server, hidden everywhere. */
+export async function deleteIncident(id: string, reason: string) {
+  const m = me();
+  if (m.role !== 'coordinator' && m.role !== 'admin') throw new Error('Only a coordinator or admin can delete a fire');
+  if (!reason.trim()) throw new Error('Give a reason');
+  const cur = await getRow<Incident>('incidents', id);
+  if (!cur) throw new Error('Incident not found');
+  const now = nowIso();
+  await putLocal('incidents', { ...cur, deleted_at: now, client_updated_at: now });
+  await logEvent(id, 'note', { text: `Deleted by ${m.name}: ${reason.trim()}` });
+}
+
+/** Correct a fire's position (pin was in the wrong place). Responders, coordinators, admins. */
+export async function moveIncident(id: string, lat: number, lon: number) {
+  const m = me();
+  if (m.role === 'reporter' || m.role === 'manager') throw new Error('Ask a coordinator to correct the location');
+  const cur = await getRow<Incident>('incidents', id);
+  if (!cur) throw new Error('Incident not found');
+  const loc = locate(lat, lon);
+  const moved = Math.round(haversineM(cur.lat, cur.lon, lat, lon));
+  await putLocal('incidents', { ...cur, lat, lon, block: loc.block, compartment: loc.compartment, location_source: 'map', location_estimated: true, accuracy_m: null, client_updated_at: nowIso() });
+  await logEvent(id, 'note', { text: `Location corrected by ${m.name} (moved ${moved} m)` }, { lat, lon, acc: null });
+}
+
 export async function addNote(id: string, text: string) {
   if (!text.trim()) return;
   await logEvent(id, 'note', { text: text.trim() });
