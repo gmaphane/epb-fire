@@ -1,0 +1,9 @@
+// Cloudflare deployment: serve the built app (dist/) as static assets.
+{
+  "name": "epb-fire",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
