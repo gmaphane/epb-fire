@@ -1,3 +1,32 @@
+# Design Language — "Calm Ember" (current, Oct 2026)
+
+Inspired by the CalmRoutes case study and the Avenza / Airbnb apps: the map is the product, one clear action per screen, very little explanatory text. The older "Field Topo GIS" notes are kept below for history; where they disagree, this section wins.
+
+**Tokens** (CSS variables in `src/styles.css`, day / night):
+
+| Role | Day | Night | Use |
+|---|---|---|---|
+| Canvas | `#F5F6F0` | `#0C1613` | screen background (warm off-white) |
+| Card | `#FFFFFF` | `#13211D` | sheets, cards, list groups |
+| Ink | `#14211D` | `#E9EFEA` | text |
+| Muted | `#5C6A64` | `#9FB0A8` | secondary text |
+| Line | `#E4E7DE` | `#1F302A` | borders, dividers |
+| Brand (forest) | `#133C34` | `#A8D5BA` | primary buttons, nav banner, active states |
+| Sage (moss) | `#DDEEDF` | `#173528` | selected chips, safe/quiet states, active tab |
+| Fire | `#E2483D` | `#F0675C` | **fire only**: markers, Report button, fire status |
+| Cobalt | `#2563EB` | `#6EA0FF` | "you" and routes |
+| Amber | `#A86200` | `#F2B652` | warnings, weak GPS |
+
+**Type:** headings in Fraunces (serif, `font-display`); everything else in DM Sans. Both are bundled, so they work offline. Scale: 28 / 22 / 20 / 16 / 15 / 13; nothing below 12 px.
+
+**Shape:** pill buttons (48–54 px high), 20 px cards, 28 px bottom sheets, 1 px borders instead of heavy shadows.
+
+**Motion (150–280 ms):** sheets spring up (`sheet-enter`), screens slide in (`screen-in`), menus pop (`pop-in`), content fades (`fade-in`), buttons press-scale (`press`), active fires pulse. All off under "reduce motion".
+
+**Components:** `Button`, `Choice` (chip / tile), `Sheet`, `Group` / `Row`, `StatusChip`, `CoordReadout` in `src/ui/kit.tsx`.
+
+---
+
 # Design Language — "Field Topo GIS", adapted for fire response
 
 Source: your Google Stitch design system (`field_topo_gis/DESIGN.md`) and the four mockups (Map, Incidents, Navigate, Perimeter). This document **keeps** that system and adds what a fire tool needs. Changes to the original are marked **Δ**.

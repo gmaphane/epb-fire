@@ -136,7 +136,7 @@ test('navigate: offline distance/bearing to an incident', async () => {
   await setGps(page, 6.8187, -0.8093); // move ~1 km south
   await page.goto('/#/navigate');
   await expect(page.getByTestId('nav-distance')).toContainText(/\d/);
-  await expect.poll(async () => page.getByTestId('nav-bearing').innerText(), { timeout: 15000 }).toMatch(/Bearing (00\d|35\d)°/);
+  await expect.poll(async () => page.getByTestId('nav-bearing').innerText(), { timeout: 15000 }).toMatch(/^(00\d|35\d)°$/);
   const d = await page.getByTestId('nav-distance').innerText();
   console.log('nav distance', d);
   await shot(page, '09-navigate');

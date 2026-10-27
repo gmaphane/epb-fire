@@ -65,17 +65,17 @@ export function SyncScreen() {
   const mb = (n: number) => (n / 1048576).toFixed(0);
 
   return (
-    <Screen title="Settings" sub="Sync, alerts, offline map" right={<SyncChip s={sy} onClick={() => engine.kick(true)} />}>
-      <Card testid="sync-status">
-        <div class="flex items-center justify-between"><div class="text-[18px] font-bold">{sy?.simulateOffline || sy?.reachable === false ? 'Offline' : sy?.needsAuth ? 'Sign in needed' : sy?.reachable ? 'Connected' : 'Checking…'}</div><GpsChip g={g} /></div>
-        <div class="grid grid-cols-3 gap-2 mt-3 text-center">
-          <div class="bg-surface-low rounded-xl py-2"><div class="text-[22px] font-bold num" data-testid="count-pending">{pending.length}</div><div class="text-[11px] text-muted font-semibold">waiting</div></div>
-          <div class="bg-surface-low rounded-xl py-2"><div class={cx('text-[22px] font-bold num', errs.length > 0 && 'text-fire')} data-testid="count-errors">{errs.length}</div><div class="text-[11px] text-muted font-semibold">errors</div></div>
-          <div class="bg-surface-low rounded-xl py-2"><div class="text-[14px] font-bold pt-1.5">{sy?.lastOkAt ? ago(new Date(sy.lastOkAt).toISOString(), now) : 'never'}</div><div class="text-[11px] text-muted font-semibold">last sync</div></div>
+    <Screen title="Settings" right={<SyncChip s={sy} onClick={() => engine.kick(true)} />}>
+      <Card testid="sync-status" pad="p-5">
+        <div class="flex items-center justify-between"><div class="font-display text-[24px]">{sy?.simulateOffline || sy?.reachable === false ? 'Offline' : sy?.needsAuth ? 'Sign in needed' : sy?.reachable ? 'Connected' : 'Checking…'}</div><GpsChip g={g} /></div>
+        <div class="grid grid-cols-3 gap-3 mt-4">
+          <div><div class="text-[26px] font-semibold num leading-none" data-testid="count-pending">{pending.length}</div><div class="text-[12px] text-muted mt-1">waiting</div></div>
+          <div><div class={cx('text-[26px] font-semibold num leading-none', errs.length > 0 && 'text-fire')} data-testid="count-errors">{errs.length}</div><div class="text-[12px] text-muted mt-1">errors</div></div>
+          <div><div class="text-[16px] font-semibold leading-[26px]">{sy?.lastOkAt ? ago(new Date(sy.lastOkAt).toISOString(), now) : 'never'}</div><div class="text-[12px] text-muted mt-1">last sync</div></div>
         </div>
         {sy?.lastError && <div class="mt-3"><Banner tone={sy.needsAuth ? 'err' : 'info'}>{sy.lastError}{sy.nextRetryAt ? ` · retrying in ${Math.max(0, Math.round((sy.nextRetryAt - now) / 1000))} s` : ''}</Banner></div>}
-        {pending.length > 0 && sy?.reachable === false && <div class="mt-3"><Banner tone="ok">Everything is saved on this phone. It sends by itself when signal returns.</Banner></div>}
-        <div class="mt-3 grid grid-cols-2 gap-2">
+        {pending.length > 0 && sy?.reachable === false && <div class="mt-3"><Banner tone="ok">Saved on this phone · sends when signal returns</Banner></div>}
+        <div class="mt-4 grid grid-cols-2 gap-2">
           <Button kind="primary" testid="sync-now" icon={<RefreshCw size={18} class={sy?.running ? 'animate-spin' : ''} />} onClick={() => void engine.kick(true)}>Sync now</Button>
           <Button disabled={!errs.length} testid="retry-errors" onClick={() => void engine.retryErrors()}>Retry errors</Button>
         </div>
@@ -84,10 +84,10 @@ export function SyncScreen() {
 
       {items.length > 0 && (
         <Card>
-          <div class="text-[12px] font-bold uppercase text-muted tracking-wide mb-2">Waiting to send</div>
+          <h2 class="font-display text-[20px] mb-3">Waiting to send</h2>
           <div class="space-y-1.5 max-h-56 overflow-y-auto" data-testid="outbox-list">
             {items.slice(0, 40).map((i) => (
-              <div key={i.key} class="flex items-start justify-between gap-2 text-[13px] border-b border-line pb-1.5">
+              <div key={i.key} class="flex items-start justify-between gap-2 text-[14px] border-b border-line last:border-0 pb-2">
                 <div class="min-w-0"><b>{i.table}</b> <span class="text-muted">{i.id.slice(0, 8)}</span>{i.error && <div class={cx('text-xs truncate', i.status === 'error' ? 'text-fire' : 'text-muted')}>{i.error}</div>}</div>
                 <span class={cx('text-xs font-bold shrink-0', i.status === 'error' ? 'text-fire' : 'text-amber')}>{i.status === 'error' ? 'ERROR' : i.attempts ? `try ${i.attempts + 1}` : 'queued'}</span>
               </div>
@@ -98,7 +98,7 @@ export function SyncScreen() {
 
       {can(role, 'admin') && (
         <Card testid="admin-card">
-          <div class="text-[12px] font-bold uppercase text-muted tracking-wide mb-2">Admin</div>
+          <h2 class="font-display text-[20px] mb-3">Admin</h2>
           <div class="grid grid-cols-2 gap-2">
             <Button kind="primary" testid="open-admin" icon={<Users size={17} />} onClick={() => go('admin')}>Users</Button>
             <Button testid="admin-export" icon={<FileSpreadsheet size={17} />} onClick={() => { downloadBlob(`EPB_fire_incidents_${new Date().toISOString().slice(0, 10)}.xlsx`, incidentsWorkbook()); toast('Spreadsheet downloaded'); }}>Incidents (Excel)</Button>
@@ -109,63 +109,62 @@ export function SyncScreen() {
       <AlertsCard />
 
       <Card>
-        <div class="text-[12px] font-bold uppercase text-muted tracking-wide mb-2">Ready for offline use?</div>
-        <ul class="space-y-1.5 text-[14px] font-semibold">
-          <Check ok={s.compartments.length > 0} label={`Site data on phone (${s.compartments.length} compartments, ${s.assets.length} assets, ${s.roads.length} roads)`} bad="Not downloaded yet — go online once and tap Sync now" />
-          <Check ok={!!pack && pack.have >= pack.total * 0.9} label={`Offline map (${pack?.have ?? 0}/${pack?.total ?? 0} tiles sampled)`} bad="Map not saved — download below while on Wi-Fi" />
-          <Check ok={persisted === true} label="Storage protected from clean-up" bad="Not protected — install the app to the home screen" />
+        <h2 class="font-display text-[20px] mb-3">Ready for offline use?</h2>
+        <ul class="space-y-2.5 text-[14px]">
+          <Check ok={s.compartments.length > 0} label={`Site data (${s.compartments.length} compartments)`} bad="go online once and tap Sync now" />
+          <Check ok={!!pack && pack.have >= pack.total * 0.9} label="Offline map" bad="download it below on Wi-Fi" />
+          <Check ok={persisted === true} label="Storage protected" bad="install the app to the home screen" />
           <Check ok={g.status === 'ok'} label="GPS working" bad={g.status === 'denied' ? 'Location blocked' : 'Waiting for GPS'} />
         </ul>
-        {est && <div class="text-xs text-muted mt-2 flex items-center gap-1"><HardDrive size={13} /> Phone storage used by app: {mb(est.usage)} MB of {mb(est.quota)} MB available</div>}
+        {est && <div class="text-[13px] text-muted mt-3 flex items-center gap-1.5"><HardDrive size={14} />{mb(est.usage)} MB used</div>}
       </Card>
 
       <Card>
-        <div class="text-[12px] font-bold uppercase text-muted tracking-wide mb-2">Offline map pack</div>
-        <div class="flex gap-2 mb-3">{(['satellite', 'street'] as const).map((b) => <button key={b} onClick={() => { setState({ basemap: b }); void metaSet('basemap', b); }} class={cx('flex-1 min-h-[44px] rounded-pill text-[13px] font-semibold', s.basemap === b ? 'bg-brand text-on-brand' : 'bg-card shadow-sm')}>{b === 'satellite' ? 'Satellite' : 'Street'}</button>)}</div>
-        <div class="text-[13px] text-muted">Site area, zoom {CONFIG.packZoom.min}–{CONFIG.packZoom.max}: <b>{plan.tiles} tiles ≈ {plan.estMb} MB</b></div>
+        <h2 class="font-display text-[20px] mb-3">Offline map pack</h2>
+        <div class="flex p-1 bg-sc rounded-pill mb-3">{(['satellite', 'street'] as const).map((b) => <button key={b} onClick={() => { setState({ basemap: b }); void metaSet('basemap', b); }} class={cx('press flex-1 h-9 rounded-pill text-[14px] font-medium', s.basemap === b ? 'bg-card text-ink shadow-l1' : 'text-muted')}>{b === 'satellite' ? 'Satellite' : 'Street'}</button>)}</div>
+        <div class="text-[14px] text-muted num">About {plan.estMb} MB · {plan.tiles} tiles</div>
         {prog && <div class="mt-2"><div class="h-2 rounded-full bg-surface-mid overflow-hidden"><div class="h-full bg-brand" style={{ width: `${(prog.done / Math.max(1, prog.total)) * 100}%` }} /></div><div class="text-xs text-muted mt-1 num">{prog.done}/{prog.total}{prog.failed ? ` · ${prog.failed} failed` : ''}</div></div>}
         <div class="grid grid-cols-2 gap-2 mt-3"><Button testid="download-pack" icon={<Download size={18} />} disabled={!!prog || !plan.allowed} onClick={() => void doPack()}>Download map</Button><Button onClick={async () => { await clearTiles(); void refresh(); toast('Saved map tiles removed'); }}>Remove</Button></div>
-        <div class="mt-3"><Banner tone="warn">Development tile source. Public tile servers generally do not allow bulk download — switch to licensed or self-hosted tiles before the pilot (see docs/05 §7).</Banner></div>
+        <p class="text-[12px] text-faint mt-3">Development tile source; use licensed tiles before the pilot.</p>
       </Card>
 
       {can(role, 'readiness') && (
         <Card>
-          <div class="text-[12px] font-bold uppercase text-muted tracking-wide mb-2">Season readiness (shown to everyone)</div>
+          <h2 class="font-display text-[20px] mb-3">Season readiness (shown to everyone)</h2>
           <div class="grid grid-cols-3 gap-2">
             {([['green', 'Green', 'bg-moss text-ok'], ['amber', 'Amber', 'bg-amber-bg text-amber'], ['red', 'Red', 'bg-fire-bg text-fire']] as const).map(([k, l, c]) => (
-              <button key={k} data-testid={'ready-' + k} onClick={async () => { await setReadiness(k, s.readiness?.note ?? ''); toast(`Readiness ${l}`); }} class={cx('min-h-[48px] rounded-lg font-bold border-2', c, (s.readiness?.level ?? 'green') === k ? 'border-ink' : 'border-transparent')}>{l}</button>
+              <button key={k} data-testid={'ready-' + k} onClick={async () => { await setReadiness(k, s.readiness?.note ?? ''); toast(`Readiness ${l}`); }} class={cx('press min-h-[48px] rounded-pill font-semibold border-2', c, (s.readiness?.level ?? 'green') === k ? 'border-ink' : 'border-transparent')}>{l}</button>
             ))}
           </div>
         </Card>
       )}
 
       <Card>
-        <div class="text-[12px] font-bold uppercase text-muted tracking-wide mb-2">Display</div>
-        <div class="grid grid-cols-3 gap-2">{([['auto', 'Auto', <Smartphone size={16} />], ['day', 'Day', <Sun size={16} />], ['night', 'Night', <Moon size={16} />]] as const).map(([k, l, ic]) => <Button key={k} testid={'theme-' + k} class={s.theme === k ? '!bg-brand !text-on-brand' : ''} icon={ic} onClick={() => { setState({ theme: k }); void saveTheme(k); }}>{l}</Button>)}</div>
-        <p class="text-xs text-muted mt-2">Auto switches to night mode 18:00–06:00.</p>
+        <h2 class="font-display text-[20px] mb-3">Display</h2>
+        <div class="flex p-1 bg-sc rounded-pill">{([['auto', 'Auto', <Smartphone size={16} />], ['day', 'Day', <Sun size={16} />], ['night', 'Night', <Moon size={16} />]] as const).map(([k, l, ic]) => <button key={k} data-testid={'theme-' + k} class={cx('press flex-1 h-10 rounded-pill text-[14px] font-medium inline-flex items-center justify-center gap-1.5', s.theme === k ? 'bg-card text-ink shadow-l1' : 'text-muted')} onClick={() => { setState({ theme: k }); void saveTheme(k); }}>{ic}{l}</button>)}</div>
+        <p class="text-[13px] text-muted mt-2">Auto turns night mode on 18:00–06:00.</p>
       </Card>
 
       <Card>
-        <div class="text-[12px] font-bold uppercase text-muted tracking-wide mb-2">Data</div>
+        <h2 class="font-display text-[20px] mb-3">Data</h2>
         <div class="grid grid-cols-2 gap-2"><Button onClick={() => void exportGeo()} testid="export-geojson">Export GeoJSON</Button><Button onClick={() => void exportCsv()}>Export CSV</Button></div>
       </Card>
 
       <Card>
-        <div class="text-[12px] font-bold uppercase text-muted tracking-wide mb-2">Testing &amp; account</div>
-        <label class="flex items-center gap-3 min-h-[48px] font-semibold"><input data-testid="sim-offline" type="checkbox" class="w-6 h-6 accent-[#16A34A]" checked={!!sy?.simulateOffline} onChange={(e) => engine.setSimulateOffline((e.target as HTMLInputElement).checked)} /> Simulate no network (testing)</label>
+        <h2 class="font-display text-[20px] mb-3">Testing &amp; account</h2>
+        <label class="flex items-center justify-between gap-3 min-h-[48px] text-[15px]">Simulate no network<input data-testid="sim-offline" type="checkbox" class="w-6 h-6 accent-[#2F8F5B]" checked={!!sy?.simulateOffline} onChange={(e) => engine.setSimulateOffline((e.target as HTMLInputElement).checked)} /></label>
         <div class="text-[13px] text-muted mt-1">{s.me?.name} · {s.me?.role} · v{CONFIG.version}{IS_DEMO ? ' · DEMO server' : ''}</div>
         <div class="grid grid-cols-2 gap-2 mt-3">
-          <Button onClick={() => void signOut()} testid="signout" disabled={pending.length > 0}>{pending.length > 0 ? 'Send records before switching user' : 'Switch user / sign out'}</Button>
+          <Button onClick={() => void signOut()} testid="signout" disabled={pending.length > 0}>{pending.length > 0 ? 'Send records first' : 'Sign out'}</Button>
           {IS_DEMO && <Button kind="danger" onClick={async () => { if (!confirm('Delete ALL data on this phone (demo)?')) return; indexedDB.deleteDatabase('epb-fire'); await clearTiles(); location.reload(); }}>Reset demo</Button>}
         </div>
       </Card>
-      <div class="h-24" />
     </Screen>
   );
 }
 
 function Check({ ok, label, bad }: { ok: boolean; label: string; bad: string }) {
-  return <li class="flex items-start gap-2"><span class={cx('mt-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0', ok ? 'bg-ok text-on-brand' : 'bg-amber-bg text-amber')}>{ok ? '✓' : '!'}</span><span class={ok ? '' : 'text-amber'}>{ok ? label : `${label} — ${bad}`}</span></li>;
+  return <li class="flex items-start gap-3"><span class={cx('mt-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0', ok ? 'bg-moss text-on-moss' : 'bg-amber-bg text-amber')}>{ok ? '✓' : '!'}</span><span><span class="block">{label}</span>{!ok && <span class="block text-[13px] text-amber">{bad}</span>}</span></li>;
 }
 
 /** Push alerts on this phone: call-outs, new fire reports, satellite hotspots, daily fire danger. */
@@ -180,17 +179,16 @@ function AlertsCard() {
     setBusy(false);
   };
   const text: Record<PushState, string> = {
-    on: 'On: this phone rings for call-outs and new fires, even when the app is closed.',
-    off: 'Off: you only see alerts while the app is open.',
-    blocked: 'Blocked: allow notifications for this site in the browser or phone settings, then come back.',
-    demo: 'Not available in demo mode.',
-    unsupported: 'This browser cannot receive alerts. On iPhone, add the app to the Home Screen first and open it from there.',
+    on: 'On · this phone rings for call-outs and new fires',
+    off: 'Off · alerts only while the app is open',
+    blocked: 'Blocked · allow notifications in the phone settings',
+    demo: 'Not available in demo mode',
+    unsupported: 'Not supported here · on iPhone, add to Home Screen first',
   };
   return (
     <Card testid="alerts-card">
-      <div class="text-[12px] font-bold uppercase text-muted tracking-wide mb-2">Fire alerts on this phone</div>
-      <p class={cx('text-[14px] font-semibold', st === 'on' ? 'text-ok' : st === 'blocked' ? 'text-fire' : 'text-ink')}>{st ? text[st] : 'Checking…'}</p>
-      <p class="text-xs text-muted mt-1">Alerts: call-outs to your crew, new fire reports (coordinators), satellite hotspots near the estate (coordinators), and the fire danger rating every morning at 05:45.</p>
+      <h2 class="font-display text-[20px] mb-3">Fire alerts on this phone</h2>
+      <p class={cx('text-[15px]', st === 'on' ? 'text-ok' : st === 'blocked' ? 'text-fire' : 'text-ink')}>{st ? text[st] : 'Checking…'}</p>
       <div class="grid grid-cols-2 gap-2 mt-3">
         {st === 'on'
           ? <Button disabled={busy} onClick={() => void run(disablePush)}>Turn off</Button>

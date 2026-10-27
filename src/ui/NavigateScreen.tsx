@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import L from 'leaflet';
-import { ArrowLeft, ChevronRight, ClipboardList, Droplets, Flame, Footprints, Layers, LocateFixed, Navigation2, RadioTower, TriangleAlert, Truck } from 'lucide-preact';
+import { ChevronLeft, ChevronRight, ClipboardList, Droplets, Flame, Footprints, Layers, LocateFixed, Navigation2, RadioTower, TriangleAlert, Truck } from 'lucide-preact';
 import { assignmentAction, addNote, reportHazard } from '../core/actions';
 import { getState, setState, toast, useStore } from '../core/store';
 import { CONFIG } from '../config';
@@ -67,7 +67,7 @@ export function NavigateScreen({ kind, id }: { kind?: string; id?: string }) {
     c.setMe(f);
     const grp = c.extra(); grp.clearLayers();
     c.setRoutes(r ? [{ coords: r.coords, primary: true }] : []);
-    if (kind === 'water') L.marker([target.lat, target.lon], { interactive: false, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div style="transform:translate(-50%,-16px);display:flex;flex-direction:column;align-items:center"><span class="pulse" style="width:32px;height:32px;border-radius:9999px;background:${kind === 'water' ? '#0284C7' : '#EF4444'};display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.25)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${kind === 'water' ? '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>' : '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>'}</svg></span><span style="margin-top:4px;background:rgb(var(--c-card));padding:2px 8px;border-radius:9999px;box-shadow:0 2px 8px rgba(0,0,0,.15);font:600 10px inherit;white-space:nowrap;color:rgb(var(--c-ink))">● Target</span></div>` }) }).addTo(grp);
+    if (kind === 'water') L.marker([target.lat, target.lon], { interactive: false, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div style="transform:translate(-50%,-16px);display:flex;flex-direction:column;align-items:center"><span class="pulse" style="width:32px;height:32px;border-radius:9999px;background:${kind === 'water' ? '#2563EB' : '#E2483D'};display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.25)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${kind === 'water' ? '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>' : '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>'}</svg></span></div>` }) }).addTo(grp);
   }, [f?.lat, f?.lon, target?.key, s.incidents, s.assets, r]);
   const fitBoth = () => { if (ctl.current && target) ctl.current.fit(r ? r.coords : f ? [[f.lat, f.lon], [target.lat, target.lon]] : [[target.lat, target.lon]], 40, { top: 120, bottom: 230 }); };
   useEffect(() => { setTimeout(fitBoth, 50); }, [target?.key, !!f]);
@@ -75,7 +75,7 @@ export function NavigateScreen({ kind, id }: { kind?: string; id?: string }) {
   if (!target) {
     return (
       <div class="h-full flex flex-col bg-surface"><AppBar title="Navigate" back={back} />
-        <main class="flex-1 p-4"><div class="bg-card rounded-2xl border border-line p-8 text-center text-muted font-semibold">No active fire to navigate to.<br />Choose one from Fires or the Map.</div></main>
+        <main class="flex-1 p-4"><div class="text-center text-muted py-16"><div class="font-display text-[22px] text-ink mb-1">Nothing to navigate to</div>Pick a fire on the map or in Fires.</div></main>
       </div>
     );
   }
@@ -86,70 +86,69 @@ export function NavigateScreen({ kind, id }: { kind?: string; id?: string }) {
   const sharingHere = !!s.presence && s.presence.status !== 'off' && s.presence.incident_id === target.incidentId;
 
   return (
-    <div class="h-full relative bg-sch overflow-hidden">
+    <div class="h-full relative bg-sch overflow-hidden screen-in">
       {/* the map is the screen */}
       <div ref={el} class="absolute inset-0" data-testid="nav-map" />
 
-      {/* top: back + where you are going + GPS quality */}
-      <div class="absolute inset-x-3 z-[1000] flex items-center gap-2" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}>
-        <button aria-label="Back" onClick={back} class="w-11 h-11 rounded-full bg-card/95 backdrop-blur-xl shadow-capsule flex items-center justify-center shrink-0"><ArrowLeft size={20} /></button>
-        <div class="flex-1 min-w-0 h-11 rounded-full bg-card/95 backdrop-blur-xl shadow-capsule pl-3 pr-2 flex items-center gap-2">
-          <span class={cx('w-7 h-7 rounded-full flex items-center justify-center shrink-0', kind === 'water' ? 'bg-cobalt text-white' : 'bg-[#EF4444] text-white')}>{kind === 'water' ? <Droplets size={15} /> : <Flame size={15} />}</span>
-          <span class="flex-1 min-w-0 text-[14px] font-semibold truncate">{target.name}</span>
-          <span data-testid="gps-quality" class={cx('px-2 py-0.5 rounded-pill text-[11px] font-semibold num shrink-0', !f ? 'bg-sc text-muted' : q === 'good' ? 'bg-moss text-on-moss' : q === 'fair' ? 'bg-amber-bg text-amber' : 'bg-fire-bg text-on-fire-bg')}>{f ? `±${Math.round(f.acc)} m` : g.status === 'denied' ? 'GPS off' : 'GPS…'}</span>
+      {/* top: a calm dark banner, like turn-by-turn: which way and how far */}
+      <div class="absolute inset-x-3 z-[1000] sheet-enter" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 10px)' }}>
+        <div class="rounded-[24px] bg-brand text-on-brand shadow-l3 pl-2 pr-4 py-3 flex items-center gap-2">
+          <button aria-label="Back" onClick={back} class="press w-10 h-10 rounded-full flex items-center justify-center shrink-0"><ChevronLeft size={26} /></button>
+          <span class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0"><Navigation2 size={20} fill="currentColor" style={{ transform: `rotate(${arrowDeg}deg)`, transition: 'transform .4s cubic-bezier(.2,.8,.2,1)' }} /></span>
+          <div class="flex-1 min-w-0">
+            <div class="font-display text-[20px] leading-tight truncate">{isFinite(brg) ? `Head ${cardinal(brg)}` : 'Finding you…'} <span class="opacity-70 num" data-testid="nav-bearing">{isFinite(brg) ? `${String(Math.round(brg)).padStart(3, '0')}°` : ''}</span></div>
+            <div class="text-[13px] opacity-75 truncate flex items-center gap-1.5">{kind === 'water' ? <Droplets size={13} /> : <Flame size={13} />}{target.name}</div>
+          </div>
+          <span data-testid="gps-quality" class={cx('px-2.5 py-1 rounded-pill text-[12px] font-semibold num shrink-0', !f ? 'bg-white/10' : q === 'good' ? 'bg-white/15' : q === 'fair' ? 'bg-amber-bg text-amber' : 'bg-fire text-on-fire')}>{f ? `±${Math.round(f.acc)} m` : g.status === 'denied' ? 'GPS off' : 'GPS…'}</span>
         </div>
       </div>
-      <div class="absolute right-3 z-[1000] flex flex-col gap-2" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 68px)' }}>
-        <button aria-label="Show me and the target" onClick={fitBoth} class="w-11 h-11 rounded-full bg-card/95 shadow-rail flex items-center justify-center text-cobalt"><LocateFixed size={20} /></button>
-        <button aria-label="Switch basemap" onClick={() => { const b = getState().basemap === 'satellite' ? 'street' : 'satellite'; setState({ basemap: b }); void metaSet('basemap', b); ctl.current?.setBasemap(b); }} class="w-11 h-11 rounded-full bg-card/95 shadow-rail flex items-center justify-center"><Layers size={20} /></button>
+      <div class="absolute right-3 z-[1000] flex flex-col gap-2.5" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 96px)' }}>
+        <button aria-label="Show me and the target" onClick={fitBoth} class="press w-11 h-11 rounded-full bg-card shadow-rail flex items-center justify-center text-cobalt"><LocateFixed size={20} /></button>
+        <button aria-label="Switch basemap" onClick={() => { const b = getState().basemap === 'satellite' ? 'street' : 'satellite'; setState({ basemap: b }); void metaSet('basemap', b); ctl.current?.setBasemap(b); }} class="press w-11 h-11 rounded-full bg-card shadow-rail flex items-center justify-center"><Layers size={20} /></button>
       </div>
 
       {/* bottom sheet: the essentials always; the rest on demand */}
-      <div class="absolute inset-x-0 bottom-0 z-[1000] bg-card rounded-t-3xl shadow-sheet pb-3" data-testid="nav-sheet">
-        <button aria-label={more ? 'Show less' : 'Show more'} data-testid="nav-more" onClick={() => setMore((v) => !v)} class="w-full pt-2 pb-1 flex justify-center"><span class="w-10 h-1.5 rounded-full bg-schh" /></button>
-        <div class="px-4 flex items-center gap-3">
-          <div class="flex-1 min-w-0">
-            <div class="flex items-baseline gap-2">
-              <span class="text-[30px] font-bold num leading-none text-cobalt">{isFinite(etaMin) ? `${etaMin} min` : '—'}</span>
-              <span class="text-[17px] font-semibold num text-ink" data-testid="nav-distance">{isFinite(dist) ? (dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(dist < 10_000 ? 1 : 0)} km`) : '—'}</span>
-            </div>
-            <div class="text-[12px] text-muted mt-1 truncate" data-testid="nav-legs">
-              {r?.viaTracks ? `${mode === 'drive' ? 'Drive' : 'Walk'} ${fmtDistance(r.onTrackM)} ${mode === 'drive' ? 'by road' : 'on tracks'}${r.offRoadM > 40 ? `, then ${fmtDistance(r.offRoadM)} on foot` : ''}` : 'Straight line on foot'}
+      <div class="absolute inset-x-0 bottom-0 z-[1000] bg-card rounded-t-sheet shadow-sheet pb-4 pb-safe sheet-enter" data-testid="nav-sheet">
+        <button aria-label={more ? 'Show less' : 'Show more'} data-testid="nav-more" onClick={() => setMore((v) => !v)} class="w-full pt-2 pb-2 flex justify-center"><span class="w-9 h-1 rounded-full bg-schh" /></button>
+        <div class="px-5 flex items-end gap-5">
+          <div>
+            <div class="text-[34px] font-semibold num leading-none tracking-[-.02em]">{isFinite(etaMin) ? `${etaMin} min` : '—'}</div>
+            <div class="text-[13px] text-muted mt-1.5">to arrive</div>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[20px] font-semibold num leading-none" data-testid="nav-distance">{isFinite(dist) ? (dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(dist < 10_000 ? 1 : 0)} km`) : '—'}</div>
+            <div class="text-[13px] text-muted mt-1.5 truncate" data-testid="nav-legs">
+              {r?.viaTracks ? `${mode === 'drive' ? 'By road' : 'On tracks'}${r.offRoadM > 40 ? `, ${fmtDistance(r.offRoadM)} on foot` : ''}` : 'Straight line on foot'}
             </div>
           </div>
-          {/* one direction readout: arrow + bearing */}
-          <div class="flex flex-col items-center shrink-0 w-[68px]">
-            <span class="w-11 h-11 rounded-full bg-cobalt-bg flex items-center justify-center"><Navigation2 size={22} class="text-cobalt" fill="currentColor" style={{ transform: `rotate(${arrowDeg}deg)`, transition: 'transform .3s' }} /></span>
-            <span class="text-[11px] font-semibold num mt-0.5" data-testid="nav-bearing">Bearing {isFinite(brg) ? `${String(Math.round(brg)).padStart(3, '0')}° ${cardinal(brg)}` : '—'}</span>
+          <div class="flex p-1 bg-sc rounded-pill shrink-0 self-center">
+            {(['drive', 'walk'] as const).map((m) => (
+              <button key={m} aria-label={m === 'drive' ? 'Vehicle' : 'On foot'} aria-pressed={mode === m} onClick={() => setMode(m)} class={cx('press w-11 h-9 rounded-pill flex items-center justify-center', mode === m ? 'bg-card shadow-l1 text-ink' : 'text-muted')}>{m === 'drive' ? <Truck size={18} /> : <Footprints size={18} />}</button>
+            ))}
           </div>
         </div>
 
-        <div class="px-4 mt-3 flex items-center gap-2">
-          <div class="flex p-0.5 bg-sc rounded-[10px] shrink-0">
-            {(['drive', 'walk'] as const).map((m) => (
-              <button key={m} aria-label={m === 'drive' ? 'Vehicle' : 'On foot'} aria-pressed={mode === m} onClick={() => setMode(m)} class={cx('w-11 h-10 rounded-[8px] flex items-center justify-center', mode === m ? 'bg-card shadow-sm text-ink' : 'text-muted')}>{m === 'drive' ? <Truck size={18} /> : <Footprints size={18} />}</button>
-            ))}
-          </div>
+        <div class="px-5 mt-5">
           {assign && nextAction ? (
-            <Button kind="primary" class="flex-1 !min-h-[44px]" testid={nextAction === 'ack' ? 'nav-ack' : nextAction === 'en_route' ? 'nav-enroute' : 'nav-onscene'} onClick={() => void assignmentAction(assign, nextAction)}>
+            <Button kind="primary" size="lg" full testid={nextAction === 'ack' ? 'nav-ack' : nextAction === 'en_route' ? 'nav-enroute' : 'nav-onscene'} onClick={() => void assignmentAction(assign, nextAction)}>
               {nextAction === 'ack' ? 'Acknowledge call-out' : nextAction === 'en_route' ? "I'm on my way" : "I'm on scene"}
             </Button>
           ) : target.incidentId ? (
-            <Button kind={sharingHere ? 'secondary' : 'primary'} class="flex-1 !min-h-[44px]" testid="send-position" icon={<RadioTower size={17} />} onClick={async () => { await addNote(target!.incidentId!, 'Position update'); if (!sharingHere) await setPresence('en_route', target!.incidentId!); toast(sharingHere ? 'Position update sent' : 'Sharing your live location with control.'); }}>
+            <Button kind={sharingHere ? 'tonal' : 'primary'} size="lg" full testid="send-position" icon={<RadioTower size={18} />} onClick={async () => { await addNote(target!.incidentId!, 'Position update'); if (!sharingHere) await setPresence('en_route', target!.incidentId!); toast(sharingHere ? 'Position update sent' : 'Sharing your live location'); }}>
               {sharingHere ? 'Send position update' : 'Share my location'}
             </Button>
-          ) : <div class="flex-1" />}
+          ) : null}
         </div>
 
         {more && (
-          <div class="px-4 mt-3 space-y-2.5 max-h-[45vh] overflow-y-auto sheet-enter" data-testid="nav-details">
+          <div class="px-5 mt-4 space-y-3 max-h-[45vh] overflow-y-auto fade-in" data-testid="nav-details">
             <CoordReadout lat={target.lat} lon={target.lon} compact />
-            {target.note && <p class="text-[13px] text-muted"><span class="font-semibold text-ink">Note:</span> {target.note}</p>}
+            {target.note && <p class="text-[14px] text-muted">{target.note}</p>}
             {water[0] && kind !== 'water' && (
-              <button onClick={() => go('navigate/water/' + water[0].a.id)} class="w-full flex items-center gap-3 rounded-xl bg-cobalt-bg px-3 py-2.5 text-left">
-                <Droplets size={18} class="text-cobalt shrink-0" />
-                <span class="flex-1 min-w-0 text-[13px] truncate"><b class="text-cobalt">Nearest water</b> · {water[0].a.name} · {fmtDistance(water[0].d)} {cardinal(water[0].b)}</span>
-                <ChevronRight size={18} class="text-cobalt shrink-0" />
+              <button onClick={() => go('navigate/water/' + water[0].a.id)} class="press w-full flex items-center gap-3 rounded-2xl border border-line px-4 py-3 text-left">
+                <span class="w-9 h-9 rounded-full bg-cobalt-bg flex items-center justify-center shrink-0"><Droplets size={18} class="text-cobalt" /></span>
+                <span class="flex-1 min-w-0"><span class="block text-[15px] font-medium truncate">Nearest water</span><span class="block text-[13px] text-muted truncate">{water[0].a.name} · {fmtDistance(water[0].d)} {cardinal(water[0].b)}</span></span>
+                <ChevronRight size={18} class="text-muted shrink-0" />
               </button>
             )}
             {hz ? (

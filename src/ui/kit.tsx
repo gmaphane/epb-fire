@@ -1,5 +1,5 @@
 import type { ComponentChildren, JSX } from 'preact';
-import { ArrowLeft, Check, CircleCheck, CircleHelp, CircleX, CloudCheck, CloudOff, Flame, Info, RefreshCw, Satellite, Search, ShieldCheck, TriangleAlert, Truck, User, Users, WifiOff } from 'lucide-preact';
+import { ChevronLeft, Check, CircleCheck, CircleHelp, CircleX, CloudCheck, CloudOff, Flame, Info, RefreshCw, Satellite, Search, ShieldCheck, TriangleAlert, Truck, User, Users, WifiOff } from 'lucide-preact';
 import { quality, type GpsState } from '../core/gps';
 import type { SyncState } from '../core/sync';
 import type { IncidentStatus, SyncState as RowSync } from '../core/types';
@@ -9,7 +9,7 @@ import { toUtm30 } from '../core/geo';
 
 export const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(' ');
 
-/** Alpine buttons: primary = obsidian, danger = ember (fire actions only), secondary = subtle slate. */
+/** Calm buttons: pill shaped. primary = deep forest, danger = fire red (fire actions only), secondary = quiet outline. */
 export function Button(p: {
   children: ComponentChildren; onClick?: () => void; kind?: 'primary' | 'danger' | 'secondary' | 'tonal' | 'ghost' | 'outline'; icon?: JSX.Element;
   disabled?: boolean; class?: string; full?: boolean; testid?: string; type?: 'button' | 'submit'; size?: 'md' | 'lg';
@@ -19,13 +19,13 @@ export function Button(p: {
     <button
       type={p.type ?? 'button'} disabled={p.disabled} onClick={p.onClick} data-testid={p.testid}
       class={cx(
-        'rounded-xl font-semibold text-[15px] tracking-[-.01em] inline-flex items-center justify-center gap-2 px-4 active:scale-[.98] active:opacity-90 transition',
-        p.size === 'lg' ? 'min-h-[52px] text-[15px]' : 'min-h-[48px]',
-        k === 'primary' && 'bg-brand text-on-brand hover:bg-brand-c',
-        k === 'danger' && 'bg-fire text-on-fire hover:bg-fire-dark',
-        k === 'secondary' && 'bg-sc text-ink',
-        k === 'tonal' && 'bg-sc text-brand-deep',
-        k === 'outline' && 'bg-card text-ink border border-schh',
+        'press rounded-pill font-semibold text-[15px] tracking-[-.005em] inline-flex items-center justify-center gap-2 px-5',
+        p.size === 'lg' ? 'min-h-[54px] text-[16px]' : 'min-h-[48px]',
+        k === 'primary' && 'bg-brand text-on-brand shadow-l1',
+        k === 'danger' && 'bg-fire text-on-fire shadow-l1',
+        k === 'secondary' && 'bg-card text-ink border border-line',
+        k === 'tonal' && 'bg-sc text-ink',
+        k === 'outline' && 'bg-transparent text-ink border border-outline-v',
         k === 'ghost' && 'bg-transparent text-muted',
         p.full && 'w-full', p.class,
       )}
@@ -35,32 +35,74 @@ export function Button(p: {
   );
 }
 
-const STATUS_STYLE: Record<IncidentStatus, { c: string; dot?: string; icon?: JSX.Element; label?: string }> = {
-  reported: { c: 'bg-fire-bg text-on-fire-bg', icon: <CircleHelp size={13} />, label: 'Unverified report' },
-  confirmed: { c: 'bg-fire-bg text-on-fire-bg', dot: 'bg-fire', label: 'Active firefront' },
-  responding: { c: 'bg-fire-bg text-on-fire-bg', dot: 'bg-fire', label: 'Active · crews responding' },
-  on_scene: { c: 'bg-fire-bg text-on-fire-bg', dot: 'bg-fire', label: 'Active · crews on scene' },
-  contained: { c: 'bg-cont-bg text-on-moss', icon: <ShieldCheck size={13} />, label: 'Contained' },
-  controlled: { c: 'bg-moss text-on-moss', icon: <ShieldCheck size={13} />, label: 'Controlled' },
-  out: { c: 'bg-moss text-on-moss', icon: <CircleCheck size={13} />, label: 'Out (cold black)' },
-  dismissed: { c: 'bg-sc text-muted', icon: <CircleX size={13} />, label: 'False alarm' },
+/** Selectable option: pill chip (small choices) or tile (icon + label), CalmRoutes style. */
+export function Choice(p: { selected: boolean; onClick: () => void; children: ComponentChildren; testid?: string; tile?: boolean; icon?: JSX.Element; class?: string }) {
+  return (
+    <button data-testid={p.testid} aria-pressed={p.selected} onClick={p.onClick}
+      class={cx('press border font-medium', p.tile ? 'rounded-2xl flex flex-col items-center justify-center gap-1.5 min-h-[76px] px-2 text-[13px]' : 'rounded-pill min-h-[40px] px-4 text-[14px] inline-flex items-center gap-1.5',
+        p.selected ? 'bg-moss border-ok/40 text-on-moss' : 'bg-card border-line text-ink', p.class)}>
+      {p.icon}{p.children}
+    </button>
+  );
+}
+
+/** Bottom sheet surface (floats over the map). */
+export function Sheet(p: { children: ComponentChildren; class?: string; testid?: string; handle?: boolean }) {
+  return (
+    <div data-testid={p.testid} class={cx('bg-card rounded-t-sheet shadow-sheet sheet-enter', p.class)}>
+      {p.handle !== false && <div class="pt-2 pb-1 flex justify-center"><span class="w-9 h-1 rounded-full bg-schh" /></div>}
+      {p.children}
+    </div>
+  );
+}
+
+/** Grouped list (settings style). */
+export function Group(p: { title?: string; children: ComponentChildren; testid?: string }) {
+  return (
+    <section data-testid={p.testid}>
+      {p.title && <h2 class="px-1 mb-2 text-[13px] font-medium text-muted">{p.title}</h2>}
+      <div class="bg-card rounded-card border border-line divide-y divide-line overflow-hidden">{p.children}</div>
+    </section>
+  );
+}
+export function Row(p: { label: ComponentChildren; value?: ComponentChildren; icon?: JSX.Element; onClick?: () => void; testid?: string; sub?: ComponentChildren }) {
+  const Tag = (p.onClick ? 'button' : 'div') as any;
+  return (
+    <Tag data-testid={p.testid} onClick={p.onClick} class={cx('w-full flex items-center gap-3 px-4 min-h-[52px] py-2.5 text-left', p.onClick && 'press active:bg-surface-low')}>
+      {p.icon && <span class="text-muted shrink-0">{p.icon}</span>}
+      <span class="flex-1 min-w-0"><span class="block text-[15px] truncate">{p.label}</span>{p.sub && <span class="block text-[13px] text-muted truncate">{p.sub}</span>}</span>
+      {p.value !== undefined && <span class="text-[15px] text-muted num shrink-0 text-right">{p.value}</span>}
+    </Tag>
+  );
+}
+
+const STATUS_STYLE: Record<IncidentStatus, { c: string; dot: string; label: string }> = {
+  reported: { c: 'text-on-fire-bg bg-fire-bg', dot: 'bg-fire', label: 'Unverified report' },
+  confirmed: { c: 'text-on-fire-bg bg-fire-bg', dot: 'bg-fire', label: 'Active' },
+  responding: { c: 'text-on-fire-bg bg-fire-bg', dot: 'bg-fire', label: 'Active · crews responding' },
+  on_scene: { c: 'text-on-fire-bg bg-fire-bg', dot: 'bg-fire', label: 'Active · crews on scene' },
+  contained: { c: 'text-on-moss bg-moss', dot: 'bg-ok', label: 'Contained' },
+  controlled: { c: 'text-on-moss bg-moss', dot: 'bg-ok', label: 'Controlled' },
+  out: { c: 'text-on-moss bg-moss', dot: 'bg-ok', label: 'Out (cold)' },
+  dismissed: { c: 'text-muted bg-sc', dot: 'bg-outline', label: 'False alarm' },
 };
 export const statusBar = (s: IncidentStatus) =>
   ({ reported: 'bg-fire', confirmed: 'bg-fire', responding: 'bg-fire', on_scene: 'bg-fire', contained: 'bg-ok', controlled: 'bg-ok', out: 'bg-ok', dismissed: 'bg-outline-v' })[s];
 
 export function StatusChip({ s, short }: { s: IncidentStatus; short?: boolean }) {
   const st = STATUS_STYLE[s];
+  const live = ['reported', 'confirmed', 'responding', 'on_scene'].includes(s);
   return (
-    <span class={cx('inline-flex items-center gap-1 px-2 py-0.5 rounded-pill text-[11px] leading-4 font-bold whitespace-nowrap', st.c)} data-status={s}>
-      {st.dot ? <span class={cx('w-1.5 h-1.5 rounded-full', st.dot, 'animate-pulse')} /> : st.icon}
+    <span class={cx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-pill text-[12px] leading-4 font-semibold whitespace-nowrap', st.c)} data-status={s}>
+      <span class={cx('w-1.5 h-1.5 rounded-full', st.dot, live && 'animate-pulse')} />
       {short ? STATUS_LABEL[s] : st.label}
     </span>
   );
 }
-export const _unused = [Truck, Users, Check];
+export const _unused = [Truck, Users, Check, Flame, User, CircleHelp, CircleX, CircleCheck, ShieldCheck];
 
 export function SatChip({ text = 'Satellite · unverified' }: { text?: string }) {
-  return <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-pill text-[11px] font-bold bg-sat-bg text-sat"><Satellite size={13} />{text}</span>;
+  return <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-pill text-[12px] font-semibold bg-sat-bg text-sat"><Satellite size={13} />{text}</span>;
 }
 
 export function RowSyncDot({ s }: { s?: RowSync }) {
@@ -80,7 +122,7 @@ export function SyncChip({ s, onClick }: { s: SyncState | null; onClick: () => v
     else if (s.reachable) { text = 'Synced'; c = 'bg-moss text-on-moss'; dot = 'bg-ok'; }
   }
   return (
-    <button data-testid="sync-chip" onClick={onClick} class={cx('inline-flex items-center gap-1 px-2 py-0.5 rounded-pill text-[11px] font-semibold min-h-[24px] whitespace-nowrap', c)}>
+    <button data-testid="sync-chip" onClick={onClick} class={cx('press inline-flex items-center gap-1.5 px-2.5 py-1 rounded-pill text-[12px] font-semibold min-h-[26px] whitespace-nowrap', c)}>
       {icon ?? <span class={cx('w-1.5 h-1.5 rounded-full animate-pulse', dot)} />}<span>{text}</span>
     </button>
   );
@@ -95,7 +137,7 @@ export function GpsChip({ g, compact }: { g: GpsState; compact?: boolean }) {
     !g.fix ? 'GPS acquiring…' :
     compact ? `±${Math.round(g.fix.acc)} m` : `GPS ±${Math.round(g.fix.acc)} m · ${Math.max(0, Math.round((g.now - g.fix.ts) / 1000))} s`;
   return (
-    <span data-testid="gps-chip" class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-muted num whitespace-nowrap">
+    <span data-testid="gps-chip" class="inline-flex items-center gap-1.5 text-[12px] font-medium text-muted num whitespace-nowrap">
       <span class={cx('w-1.5 h-1.5 rounded-full', dot, q === 'good' && 'animate-pulse')} />{text}
     </span>
   );
@@ -104,40 +146,34 @@ export function GpsChip({ g, compact }: { g: GpsState; compact?: boolean }) {
 /** Stitch metric tile: tonal block, label over value, no borders. */
 export function Metric(p: { label: string; value: string; unit?: string; big?: boolean; tone?: string; testid?: string }) {
   return (
-    <div class="bg-surface-low rounded-xl p-2.5 min-w-0 flex flex-col">
-      <span class="text-[11px] font-semibold text-muted">{p.label}</span>
-      <span class={cx('num font-semibold leading-tight mt-0.5 truncate', p.big ? 'text-[24px]' : 'text-[16px]', p.tone ?? 'text-ink')} data-testid={p.testid}>
-        {p.value}{p.unit && <span class="text-[12px] font-semibold text-muted ml-1">{p.unit}</span>}
+    <div class="min-w-0 flex flex-col">
+      <span class={cx('num font-semibold leading-tight truncate tracking-[-.02em]', p.big ? 'text-[30px]' : 'text-[18px]', p.tone ?? 'text-ink')} data-testid={p.testid}>
+        {p.value}{p.unit && <span class="text-[13px] font-medium text-muted ml-1">{p.unit}</span>}
       </span>
+      <span class="text-[12px] text-muted mt-0.5">{p.label}</span>
     </div>
   );
 }
 
 export function Banner(p: { tone: 'warn' | 'err' | 'info' | 'ok'; children: ComponentChildren; testid?: string }) {
   const c = { warn: 'bg-amber-bg text-amber', err: 'bg-fire-bg text-on-fire-bg', info: 'bg-sch text-ink', ok: 'bg-moss text-on-moss' }[p.tone];
-  return <div data-testid={p.testid} class={cx('rounded-xl px-3 py-2.5 text-[13px] font-semibold', c)}>{p.children}</div>;
+  return <div data-testid={p.testid} class={cx('rounded-2xl px-4 py-3 text-[14px] font-medium fade-in', c)}>{p.children}</div>;
 }
 
-/** Top app bar: obsidian flame mark, title, search, info, avatar. */
+/** Calm header: serif title, no bar chrome. Back screens get a plain chevron. */
 export function AppBar(p: { title: string; sub?: string; back?: () => void; right?: ComponentChildren }) {
   return (
-    <header class="pt-safe blur-bar border-b border-line shrink-0 z-[1050] relative">
-      <div class="h-14 px-4 flex items-center justify-between gap-2">
-        <div class="flex items-center gap-2 min-w-0 flex-1">
-          {p.back ? (
-            <button aria-label="Back" onClick={p.back} class="w-9 h-9 rounded-full bg-sc flex items-center justify-center shrink-0 text-ink"><ArrowLeft size={20} /></button>
-          ) : (
-            <div class="w-9 h-9 rounded-[10px] bg-[#0F172A] flex items-center justify-center shrink-0"><Flame size={19} class="text-[#EF4444]" fill="#EF4444" /></div>
-          )}
-          <div class="flex flex-col min-w-0">
-            <h1 class="text-[17px] font-semibold tracking-[-.02em] leading-6 truncate" data-testid="appbar-title">{p.title}</h1>
-            <span class="text-[10px] font-semibold tracking-[.06em] uppercase text-muted leading-[14px] truncate">{p.sub ?? 'EPBWA Fire'}</span>
-          </div>
+    <header class="pt-safe shrink-0 z-[1050] relative bg-surface">
+      <div class={cx('px-4 flex items-center gap-2', p.back ? 'h-14' : 'h-16')}>
+        {p.back && <button aria-label="Back" onClick={p.back} class="press -ml-2 w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-ink"><ChevronLeft size={26} strokeWidth={2} /></button>}
+        <div class="flex flex-col min-w-0 flex-1">
+          <h1 class={cx('font-display truncate leading-tight', p.back ? 'text-[20px]' : 'text-[28px]')} data-testid="appbar-title">{p.title}</h1>
+          {p.sub && <span class="text-[13px] text-muted truncate">{p.sub}</span>}
         </div>
-        <div class="flex items-center gap-1 shrink-0">
+        <div class="flex items-center shrink-0 -mr-2">
           {p.right}
-          {!p.back && <button aria-label="Search" data-testid="appbar-search" onClick={() => setState({ overlay: 'search' })} class="w-11 h-11 flex items-center justify-center rounded-full text-muted"><Search size={22} /></button>}
-          <button aria-label="Status and info" data-testid="appbar-info" onClick={() => setState({ overlay: 'info' })} class="w-11 h-11 flex items-center justify-center rounded-full text-muted"><Info size={22} /></button>
+          {!p.back && <button aria-label="Search" data-testid="appbar-search" onClick={() => setState({ overlay: 'search' })} class="press w-11 h-11 flex items-center justify-center rounded-full text-ink"><Search size={21} /></button>}
+          <button aria-label="Status and info" data-testid="appbar-info" onClick={() => setState({ overlay: 'info' })} class="press w-11 h-11 flex items-center justify-center rounded-full text-ink"><Info size={21} /></button>
         </div>
       </div>
     </header>
@@ -146,9 +182,9 @@ export function AppBar(p: { title: string; sub?: string; back?: () => void; righ
 
 export function Screen(p: { title: string; sub?: string; right?: ComponentChildren; children: ComponentChildren; back?: () => void; pad?: boolean }) {
   return (
-    <div class="h-full flex flex-col bg-surface">
+    <div class="h-full flex flex-col bg-surface screen-in">
       <AppBar title={p.title} sub={p.sub} back={p.back} right={p.right} />
-      <main class={cx('flex-1 overflow-y-auto', p.pad !== false && 'px-4 pt-3 pb-4 space-y-3')}>{p.children}</main>
+      <main class={cx('flex-1 overflow-y-auto', p.pad !== false && 'px-4 pt-2 pb-28 space-y-5')}>{p.children}</main>
     </div>
   );
 }
@@ -156,22 +192,22 @@ export function Screen(p: { title: string; sub?: string; right?: ComponentChildr
 /** Stitch card: white, 12px radius, soft shadow, optional 6px status accent bar. */
 export function Card(p: { children: ComponentChildren; class?: string; bar?: string; onClick?: () => void; testid?: string; pad?: string }) {
   return (
-    <div data-testid={p.testid} onClick={p.onClick} class={cx('relative bg-card rounded-2xl border border-line shadow-l1 overflow-hidden', p.onClick && 'active:scale-[.99] transition-transform', p.class)}>
-      {p.bar && <div class={cx('absolute left-0 top-0 bottom-0 w-1.5', p.bar)} />}
-      <div class={p.pad ?? (p.bar ? 'pl-5 pr-4 py-4' : 'p-4')}>{p.children}</div>
+    <div data-testid={p.testid} onClick={p.onClick} class={cx('relative bg-card rounded-card border border-line overflow-hidden', p.onClick && 'press', p.class)}>
+      {p.bar && <div class={cx('absolute left-0 top-4 bottom-4 w-1 rounded-r-full', p.bar)} />}
+      <div class={p.pad ?? (p.bar ? 'pl-6 pr-5 py-5' : 'p-5')}>{p.children}</div>
     </div>
   );
 }
 
 export const SectionLabel = ({ children }: { children: ComponentChildren }) => (
-  <div class="text-[10px] font-semibold uppercase tracking-[.06em] text-muted mb-2">{children}</div>
+  <div class="text-[13px] font-medium text-muted mb-2">{children}</div>
 );
 
 /** Round floating map tool button (Stitch tool rail). */
 export function RailButton(p: { label: string; onClick: () => void; children: ComponentChildren; active?: boolean; testid?: string; tone?: string }) {
   return (
     <button aria-label={p.label} data-testid={p.testid} onClick={p.onClick}
-      class={cx('w-11 h-11 rounded-full shadow-rail flex items-center justify-center active:scale-95 transition-transform', p.active ? 'bg-brand text-on-brand' : cx('bg-card/95 backdrop-blur', p.tone ?? 'text-ink'))}>
+      class={cx('press w-11 h-11 rounded-full shadow-rail flex items-center justify-center', p.active ? 'bg-brand text-on-brand' : cx('bg-card', p.tone ?? 'text-ink'))}>
       {p.children}
     </button>
   );
@@ -194,14 +230,13 @@ export const radioUtm = (lat: number, lon: number) => { const u = toUtm30(lat, l
 export function CoordReadout({ lat, lon, testid, compact }: { lat: number; lon: number; testid?: string; compact?: boolean }) {
   const dd = radioDd(lat, lon), utm = radioUtm(lat, lon);
   return (
-    <button data-testid={testid} class="w-full text-left rounded-xl bg-[#0F172A] text-white px-3.5 py-2.5 active:opacity-90" aria-label="Copy coordinates"
+    <button data-testid={testid} class="press w-full text-left rounded-2xl bg-surface-low border border-line px-4 py-3" aria-label="Copy coordinates"
       onClick={() => { void navigator.clipboard?.writeText(`${lat.toFixed(5)}, ${lon.toFixed(5)} | UTM 30N ${utm}`); toast('Coordinates copied'); }}>
-      <div class="flex items-baseline justify-between gap-2">
-        <span class="text-[10px] font-semibold uppercase tracking-[.08em] text-white/60">Fire position · WGS84</span>
-        <span class="text-[10px] text-white/50">tap to copy</span>
+      <div class={cx('num font-semibold tracking-[-.01em] whitespace-nowrap text-ink', compact ? 'text-[19px]' : 'text-[22px]')}>{dd}</div>
+      <div class="flex items-baseline justify-between gap-2 mt-0.5">
+        <span class={cx('num text-muted whitespace-nowrap', compact ? 'text-[13px]' : 'text-[14px]')}>UTM 30N {utm}</span>
+        <span class="text-[12px] text-faint">Tap to copy</span>
       </div>
-      <div class={cx('font-mono font-semibold num tracking-tight whitespace-nowrap', compact ? 'text-[19px]' : 'text-[22px]')}>{dd}</div>
-      <div class={cx('font-mono num text-white/85 whitespace-nowrap', compact ? 'text-[15px]' : 'text-[17px]')}><span class="text-white/55 text-[11px] font-sans font-semibold mr-1.5">UTM 30N</span>{utm}</div>
     </button>
   );
 }

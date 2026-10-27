@@ -6,15 +6,15 @@ import { gps, quality } from '../core/gps';
 import { getState, toast, useStore } from '../core/store';
 import { CONFIG } from '../config';
 import { MapController } from './mapview';
-import { Banner, Button, GpsChip, Screen, cx } from './kit';
+import { Banner, Button, Choice, GpsChip, Screen, cx } from './kit';
 import { back, go, useGps } from './hooks';
 import { fmtDd, fmtDistance, fmtDms, haversineM, toUtm30 } from '../core/geo';
 import { parseCoordinates, radioDigits, siteDistanceKm } from '../core/coords';
 import { locate } from '../core/actions';
 import type { Incident } from '../core/types';
 
-const SOURCES: [Incident['source'], string][] = [['patrol', 'Patrol / field'], ['tower', 'Lookout tower'], ['camera', 'Camera'], ['community', 'Community'], ['satellite', 'Satellite'], ['other', 'Other']];
-const SIZES: [Incident['size_class'], string][] = [['unknown', 'Not sure'], ['small', 'Small (≈ <1 ha)'], ['medium', 'Medium'], ['large', 'Large / spreading fast']];
+const SOURCES: [Incident['source'], string][] = [['patrol', 'Patrol'], ['tower', 'Lookout tower'], ['camera', 'Camera'], ['community', 'Community'], ['satellite', 'Satellite'], ['other', 'Other']];
+const SIZES: [Incident['size_class'], string][] = [['unknown', 'Not sure'], ['small', 'Small, under 1 ha'], ['medium', 'Medium'], ['large', 'Large or spreading']];
 
 const lastSource = (): Incident['source'] => { try { return (localStorage.getItem('epb.lastSource') as Incident['source']) || 'patrol'; } catch { return 'patrol'; } };
 
@@ -98,105 +98,90 @@ export function ReportScreen({ detection }: { detection: string | null }) {
       (window as any).__lastReportMs = Math.round(performance.now() - t0);
       if (again) {
         // stay here to pin the next fire
-        toast(`Fire ${inc.label} saved. Tap the map for the next one.`);
+        toast(`${inc.label} saved · tap the map for the next one`);
         setNotes(''); setPhoto(null); setAck(false); setBusy(false);
         return;
       }
-      toast(mode === 'manual' ? 'Relayed fire saved — sending to everyone when signal allows' : 'Saved on this phone — sending when signal allows');
+      toast(mode === 'manual' ? 'Relayed fire reported' : 'Fire reported');
       go('incident/' + inc.id);
     } catch (e) { toast((e as Error).message, 'err'); setBusy(false); }
   };
 
+  const field = 'w-full min-h-[52px] rounded-2xl border border-line bg-card px-4 text-[16px] outline-none focus:border-brand transition-colors';
   return (
-    <Screen title="Report fire" sub={det ? 'From satellite detection' : 'Takes 2 taps'} back={back} pad={false}>
-      <div class="relative h-[34%] min-h-[210px]">
+    <Screen title="Report fire" sub={det ? 'From a satellite hotspot' : undefined} back={back} pad={false}>
+      <div class="relative h-[36%] min-h-[220px] mx-4 rounded-[24px] overflow-hidden shadow-l1">
         <div ref={el} class="absolute inset-0" data-testid="report-map" />
-        <div class="absolute top-2 left-2 right-2 z-[1000] pointer-events-none">
-          <div class="bg-card/95 rounded-pill px-4 py-2 text-[13px] shadow-capsule">
-            <div class="flex items-center justify-between"><GpsChip g={g} /><span class="text-[10px] font-bold uppercase tracking-wide text-muted">{mode === 'manual' ? 'Typed in' : mode === 'map' ? 'Pinned' : 'My GPS'}</span></div>
-            <div class="num font-semibold" data-testid="report-coords">{pos ? fmtDd(pos.lat, pos.lon) : mode === 'manual' ? 'Enter the coordinate below' : 'No position yet — tap the map to place the fire'}</div>
+        <div class="absolute top-3 left-3 right-3 z-[1000] pointer-events-none">
+          <div class="bg-card rounded-pill pl-4 pr-3 py-2 shadow-capsule inline-flex flex-col max-w-full">
+            <div class="num font-semibold text-[15px] truncate" data-testid="report-coords">{pos ? fmtDd(pos.lat, pos.lon) : mode === 'manual' ? 'Type the coordinate below' : 'Tap the map to place the fire'}</div>
+            <div class="flex items-center gap-2"><GpsChip g={g} compact /><span class="text-[12px] text-muted">· {mode === 'manual' ? 'Typed in' : mode === 'map' ? 'Pinned' : 'My GPS'}</span></div>
           </div>
         </div>
       </div>
-      <div class="p-4 space-y-4 overflow-y-auto" style={{ height: '66%' }}>
-        {g.status === 'denied' && <Banner tone="err">Location permission is blocked. Tap the map to place the fire, and allow location in browser settings.</Banner>}
-        {g.fix && q === 'poor' && mode === 'gps' && <Banner tone="warn">GPS is weak (±{Math.round(g.fix.acc)} m). You can still report; drag the flame on the map to correct it.</Banner>}
+      <div class="px-4 pt-5 pb-10 space-y-6 overflow-y-auto" style={{ height: '64%' }}>
+        {g.status === 'denied' && <Banner tone="err">Location is blocked. Tap the map to place the fire.</Banner>}
+        {g.fix && q === 'poor' && mode === 'gps' && <Banner tone="warn">Weak GPS (±{Math.round(g.fix.acc)} m). Drag the flame to correct it.</Banner>}
         <div>
-          <div class="text-[13px] font-bold text-muted mb-1.5">Fire location</div>
-          <div class="grid grid-cols-3 gap-1 p-1 bg-surface-low rounded-pill" role="tablist">
-            {([['gps', 'My GPS', <LocateFixed size={15} />], ['map', 'Pin on map', <MapPin size={15} />], ['manual', 'Type / radio', <Keyboard size={15} />]] as const).map(([k, l, ic]) => (
-              <button key={k} role="tab" aria-selected={mode === k} data-testid={'loc-' + k} onClick={() => { setMode(k); if (k === 'map' && !pin && live) setPin({ lat: live.lat, lon: live.lon }); }} class={cx('min-h-[40px] rounded-pill text-[12px] font-semibold inline-flex items-center justify-center gap-1', mode === k ? 'bg-card shadow-sm text-brand-deep' : 'text-muted')}>{ic}{l}</button>
+          <h2 class="font-display text-[20px] mb-3">Where is it?</h2>
+          <div class="grid grid-cols-3 gap-1 p-1 bg-sc rounded-pill" role="tablist">
+            {([['gps', 'My GPS', <LocateFixed size={16} />], ['map', 'On map', <MapPin size={16} />], ['manual', 'Type in', <Keyboard size={16} />]] as const).map(([k, l, ic]) => (
+              <button key={k} role="tab" aria-selected={mode === k} data-testid={'loc-' + k} onClick={() => { setMode(k); if (k === 'map' && !pin && live) setPin({ lat: live.lat, lon: live.lon }); }} class={cx('press min-h-[42px] rounded-pill text-[14px] font-medium inline-flex items-center justify-center gap-1.5', mode === k ? 'bg-card shadow-l1 text-ink' : 'text-muted')}>{ic}{l}</button>
             ))}
           </div>
-          {mode === 'map' && <p class="text-[12px] text-muted mt-1.5">Tap the map or drag the flame to where the fire is.</p>}
         </div>
         {mode === 'manual' && (
-          <div class="bg-card rounded-xl shadow-md p-3 space-y-3" data-testid="manual-panel">
-            <div>
-              <label class="text-[12px] font-semibold text-muted" for="coord">Coordinates read out from the field</label>
-              <input id="coord" data-testid="coord-input" inputMode="text" autoComplete="off" spellcheck={false} class="mt-1 w-full min-h-[52px] rounded-lg border border-outline-v bg-card px-3 text-[17px] font-semibold num tracking-wide" placeholder="6.8287 N 0.8093 W  ·  or UTM 742110 755363" value={coordText} onInput={(e) => setCoordText((e.target as HTMLInputElement).value)} />
-              <p class="text-[11px] text-muted mt-1">Accepts decimal degrees, degrees-minutes-seconds, or UTM 30N easting/northing. No N/S/E/W given → site default N and W.</p>
-            </div>
+          <div class="space-y-3 fade-in" data-testid="manual-panel">
+            <input id="coord" aria-label="Coordinates read out from the field" data-testid="coord-input" inputMode="text" autoComplete="off" spellcheck={false} class={cx(field, 'min-h-[56px] text-[18px] font-semibold num')} placeholder="6.8287 N 0.8093 W  or  UTM" value={coordText} onInput={(e) => setCoordText((e.target as HTMLInputElement).value)} />
             {parsed && !parsed.ok && <Banner tone="err" testid="coord-error">{parsed.error}</Banner>}
             {parsed?.ok && manualPos && (() => { const u = toUtm30(manualPos.lat, manualPos.lon); const where = locate(manualPos.lat, manualPos.lon); return (
-              <div class={cx('rounded-xl p-3 space-y-1', farKm > 30 ? 'bg-fire-bg' : 'bg-cobalt-bg')} data-testid="readback">
-                <div class="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted"><Radio size={14} />Read back to the caller</div>
-                <div class="text-[18px] font-bold num leading-6">{fmtDms(manualPos.lat, 'lat')}  {fmtDms(manualPos.lon, 'lon')}</div>
-                <div class="text-[14px] font-semibold num">{fmtDd(manualPos.lat, manualPos.lon)} · UTM 30N {radioDigits(u.e)} E {radioDigits(u.n)} N</div>
-                <div class="text-[12px] font-semibold">{where.compartment ? `${where.compartment} · ${where.block}` : 'Outside mapped compartments'}{live ? ` · ${fmtDistance(haversineM(live.lat, live.lon, manualPos.lat, manualPos.lon))} from you` : ''}</div>
-                {parsed.assumedHemisphere && <div class="text-[12px] font-semibold text-amber">No N/S/E/W given — assumed North and West (site default). Confirm with the caller.</div>}
-                {farKm > 30 && <div class="text-[13px] font-bold text-on-fire-bg" data-testid="far-warning">This is {Math.round(farKm)} km from the site — check the digits and E/W with the caller.</div>}
+              <div class={cx('rounded-[20px] p-4 space-y-1 fade-in', farKm > 30 ? 'bg-fire-bg' : 'bg-moss')} data-testid="readback">
+                <div class="flex items-center gap-1.5 text-[13px] text-muted"><Radio size={15} />Read back to the caller</div>
+                <div class="text-[20px] font-semibold num leading-7">{fmtDms(manualPos.lat, 'lat')}  {fmtDms(manualPos.lon, 'lon')}</div>
+                <div class="text-[14px] num">{fmtDd(manualPos.lat, manualPos.lon)} · UTM 30N {radioDigits(u.e)} E {radioDigits(u.n)} N</div>
+                <div class="text-[14px] font-medium">{where.compartment ? `${where.compartment} · ${where.block}` : 'Outside mapped compartments'}{live ? ` · ${fmtDistance(haversineM(live.lat, live.lon, manualPos.lat, manualPos.lon))} from you` : ''}</div>
+                {parsed.assumedHemisphere && <div class="text-[13px] font-medium text-amber">Assumed North and West. Confirm with the caller.</div>}
+                {farKm > 30 && <div class="text-[14px] font-semibold text-on-fire-bg" data-testid="far-warning">This is {Math.round(farKm)} km from the site — check the digits and E/W with the caller.</div>}
               </div>
             ); })()}
             <div class="grid grid-cols-2 gap-2">
-              <div>
-                <label class="text-[12px] font-semibold text-muted" for="observer">Seen by (field person)</label>
-                <input id="observer" data-testid="observer" class="mt-1 w-full min-h-[48px] rounded-lg border border-outline-v bg-card px-3" placeholder="e.g. Kwame, Block B patrol" value={observer} onInput={(e) => setObserver((e.target as HTMLInputElement).value)} />
-              </div>
-              <div>
-                <label class="text-[12px] font-semibold text-muted" for="seen">Time seen</label>
-                <input id="seen" type="time" data-testid="seen-at" class="mt-1 w-full min-h-[48px] rounded-lg border border-outline-v bg-card px-3 num" value={seenAt} onInput={(e) => setSeenAt((e.target as HTMLInputElement).value)} />
-              </div>
+              <input id="observer" aria-label="Seen by" data-testid="observer" class={field} placeholder="Seen by" value={observer} onInput={(e) => setObserver((e.target as HTMLInputElement).value)} />
+              <input id="seen" aria-label="Time seen" type="time" data-testid="seen-at" class={cx(field, 'num')} value={seenAt} onInput={(e) => setSeenAt((e.target as HTMLInputElement).value)} />
             </div>
-            <div class="grid grid-cols-2 gap-2 items-end">
-              <div>
-                <div class="text-[12px] font-semibold text-muted mb-1">Received by</div>
-                <div class="flex gap-1.5">{([['radio', 'Radio'], ['phone', 'Phone call']] as const).map(([k, l]) => <button key={k} data-testid={'via-' + k} onClick={() => setVia(k)} class={cx('flex-1 min-h-[44px] rounded-pill text-[12px] font-semibold', via === k ? 'bg-brand text-on-brand' : 'bg-sc')}>{l}</button>)}</div>
-              </div>
-              <div>
-                <label class="text-[12px] font-semibold text-muted" for="acc">GPS accuracy read out (m)</label>
-                <input id="acc" inputMode="decimal" class="mt-1 w-full min-h-[44px] rounded-lg border border-outline-v bg-card px-3 num" placeholder="optional" value={accText} onInput={(e) => setAccText((e.target as HTMLInputElement).value.replace(/[^\d.]/g, ''))} />
-              </div>
+            <div class="flex gap-2 items-center">
+              {([['radio', 'Radio'], ['phone', 'Phone call']] as const).map(([k, l]) => <Choice key={k} testid={'via-' + k} selected={via === k} onClick={() => setVia(k)}>{l}</Choice>)}
+              <input id="acc" aria-label="GPS accuracy read out (m)" inputMode="decimal" class={cx(field, 'flex-1 min-w-0 min-h-[40px] h-10 rounded-pill text-[14px] num')} placeholder="± m (optional)" value={accText} onInput={(e) => setAccText((e.target as HTMLInputElement).value.replace(/[^\d.]/g, ''))} />
             </div>
           </div>
         )}
         {dups.length > 0 && !ack && (
           <Banner tone="warn" testid="dup-banner">
-            Possible duplicate: {dups[0].code ?? dups[0].label} is {fmtDistance(haversineM(pos!.lat, pos!.lon, dups[0].lat, dups[0].lon))} away.
-            <div class="flex gap-2 mt-2"><Button class="flex-1" onClick={() => go('incident/' + dups[0].id)}>View it</Button><Button class="flex-1" testid="report-anyway" onClick={() => setAck(true)}>Report anyway</Button></div>
+            {dups[0].code ?? dups[0].label} is {fmtDistance(haversineM(pos!.lat, pos!.lon, dups[0].lat, dups[0].lon))} away. Same fire?
+            <div class="flex gap-2 mt-3"><Button class="flex-1" onClick={() => go('incident/' + dups[0].id)}>View it</Button><Button class="flex-1" testid="report-anyway" onClick={() => setAck(true)}>Report anyway</Button></div>
           </Banner>
         )}
         <div>
-          <div class="text-[13px] font-bold text-muted mb-1.5">Detected by</div>
-          <div class="flex flex-wrap gap-2">{SOURCES.map(([k, l]) => <button key={k} data-testid={'src-' + k} onClick={() => setSource(k)} class={cx('px-3.5 min-h-[44px] rounded-pill text-[13px] font-semibold', source === k ? 'bg-brand text-on-brand' : 'bg-card shadow-sm')}>{l}</button>)}</div>
+          <h2 class="font-display text-[20px] mb-3">Who saw it?</h2>
+          <div class="flex flex-wrap gap-2">{SOURCES.map(([k, l]) => <Choice key={k} testid={'src-' + k} selected={source === k} onClick={() => setSource(k)}>{l}</Choice>)}</div>
         </div>
         <div>
-          <div class="text-[13px] font-bold text-muted mb-1.5">Size</div>
-          <div class="flex flex-wrap gap-2">{SIZES.map(([k, l]) => <button key={k} data-testid={'size-' + k} onClick={() => setSize(k)} class={cx('px-3.5 min-h-[44px] rounded-pill text-[13px] font-semibold', size === k ? 'bg-brand text-on-brand' : 'bg-card shadow-sm')}>{l}</button>)}</div>
+          <h2 class="font-display text-[20px] mb-3">How big?</h2>
+          <div class="flex flex-wrap gap-2">{SIZES.map(([k, l]) => <Choice key={k} testid={'size-' + k} selected={size === k} onClick={() => setSize(k)}>{l}</Choice>)}</div>
         </div>
-        <div class="flex gap-2">
-          <input data-testid="notes" class="flex-1 min-h-[48px] rounded-lg border border-outline-v bg-card px-3" placeholder="Notes (optional) — smoke colour, wind, access…" value={notes} onInput={(e) => setNotes((e.target as HTMLInputElement).value)} />
-          <button aria-label="Add photo" class={cx('w-12 rounded-lg flex items-center justify-center', photo ? 'bg-moss text-on-moss' : 'bg-sc')} onClick={() => file.current?.click()}><Camera size={20} /></button>
+        <div class="relative">
+          <input data-testid="notes" class={cx(field, 'pr-14')} placeholder="Add a note (optional)" value={notes} onInput={(e) => setNotes((e.target as HTMLInputElement).value)} />
+          <button aria-label="Add photo" class={cx('press absolute right-1.5 top-1.5 w-10 h-10 rounded-full flex items-center justify-center', photo ? 'bg-moss text-on-moss' : 'text-muted')} onClick={() => file.current?.click()}><Camera size={20} /></button>
           <input ref={file} type="file" accept="image/*" capture="environment" class="hidden" onChange={(e) => setPhoto((e.target as HTMLInputElement).files?.[0] ?? null)} />
         </div>
-        <Button kind="danger" full testid="submit-report" disabled={busy || (dups.length > 0 && !ack) || (mode === 'manual' && !manualPos)} icon={<Flame size={22} />} class="min-h-[64px] text-[18px]" onClick={() => void submit(false)}>
-          {busy ? 'Saving…' : mode === 'manual' ? 'REPORT RELAYED FIRE' : 'REPORT FIRE'}
-        </Button>
-        {mode === 'map' && !det && (
-          <Button full testid="submit-another" disabled={busy || (dups.length > 0 && !ack)} onClick={() => void submit(true)}>Save and pin another fire</Button>
-        )}
-        <p class="text-[12px] text-muted text-center">Saved on this phone first. It sends by itself as soon as there is any signal.</p>
-        <div class="h-8" />
+        <div class="space-y-2">
+          <Button kind="danger" size="lg" full testid="submit-report" disabled={busy || (dups.length > 0 && !ack) || (mode === 'manual' && !manualPos)} icon={<Flame size={20} fill="currentColor" />} class="min-h-[58px] text-[17px]" onClick={() => void submit(false)}>
+            {busy ? 'Saving…' : mode === 'manual' ? 'Report relayed fire' : 'Report fire'}
+          </Button>
+          {mode === 'map' && !det && (
+            <Button kind="ghost" full testid="submit-another" disabled={busy || (dups.length > 0 && !ack)} onClick={() => void submit(true)}>Save and pin another</Button>
+          )}
+          <p class="text-[13px] text-faint text-center">Works offline · sends when there's signal</p>
+        </div>
       </div>
     </Screen>
   );

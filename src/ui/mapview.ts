@@ -13,10 +13,10 @@ export const RISK: Record<string, { c: string; label: string; w: number; f: numb
   low: { c: '#E2E8F0', label: 'Low', w: 1.6, f: 0.05 },
   moderate: { c: '#FDE047', label: 'Moderate', w: 1.8, f: 0.08 },
   high: { c: '#FB923C', label: 'High', w: 2.2, f: 0.12 },
-  very_high: { c: '#EF4444', label: 'Very high', w: 2.6, f: 0.16 },
-  extreme: { c: '#DC2626', label: 'Extreme', w: 3.2, f: 0.24 },
+  very_high: { c: '#E2483D', label: 'Very high', w: 2.6, f: 0.16 },
+  extreme: { c: '#C7372D', label: 'Extreme', w: 3.2, f: 0.24 },
 };
-const CASING = '#0F172A';
+const CASING = '#133C34';
 
 const SVG = (inner: string, size = 16, fill = 'none', stroke = '#fff') =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="${fill}" stroke="${stroke}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -49,12 +49,12 @@ const ICON = {
   flag: SVG('<path d="M4 22V4"/><path d="M4 4h12l-2 4 2 4H4"/>'),
 };
 const assetStyle: Record<string, { c: string; p: string }> = {
-  water: { c: '#0284C7', p: PATHS.drop },
+  water: { c: '#2563EB', p: PATHS.drop },
   camera: { c: '#475569', p: PATHS.camera },
   tower: { c: '#1E293B', p: PATHS.eye },
   camp: { c: '#334155', p: PATHS.tent },
   assembly: { c: '#64748B', p: PATHS.flag },
-  standby_post: { c: '#0F172A', p: PATHS.user },
+  standby_post: { c: '#133C34', p: PATHS.user },
   parking: { c: '#475569', p: PATHS.truck },
   community: { c: '#94A3B8', p: PATHS.house },
 };
@@ -110,8 +110,8 @@ function labelPointCalc(g: GeoJSON.Polygon | GeoJSON.MultiPolygon): [number, num
 const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
 const OVERLAY_STYLE: Record<string, L.PathOptions> = {
-  high_risk_zone: { color: '#EF4444', weight: 1.5, dashArray: '6 4', fillColor: '#EF4444', fillOpacity: 0.06 },
-  burnt_area: { color: '#1E293B', weight: 1, fillColor: '#0F172A', fillOpacity: 0.4 },
+  high_risk_zone: { color: '#E2483D', weight: 1.5, dashArray: '6 4', fillColor: '#E2483D', fillOpacity: 0.06 },
+  burnt_area: { color: '#1E293B', weight: 1, fillColor: '#133C34', fillOpacity: 0.4 },
   camera_coverage: { color: '#F8FAFC', weight: 1.2, dashArray: '2 6', fillColor: '#F8FAFC', fillOpacity: 0.05 },
   firebreak: { color: '#F8FAFC', weight: 2, dashArray: '5 5', opacity: 0.95 },
   standby_route: { color: '#F8FAFC', weight: 2, dashArray: '1 6', lineCap: 'round', opacity: 0.9 },
@@ -125,12 +125,12 @@ const pin = (bg: string, inner: string, size = 28, cls = '') =>
   L.divIcon({ className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2], html: `<div class="pin ${cls}" style="width:${size}px;height:${size}px;background:${bg}">${inner}</div>` });
 
 const incidentColor = (s: Incident['status']) =>
-  ({ reported: '#EF4444', confirmed: '#DC2626', responding: '#DC2626', on_scene: '#DC2626', contained: '#16A34A', controlled: '#16A34A', out: '#64748B', dismissed: '#94A3B8' })[s];
+  ({ reported: '#E2483D', confirmed: '#C7372D', responding: '#C7372D', on_scene: '#C7372D', contained: '#2F8F5B', controlled: '#2F8F5B', out: '#64748B', dismissed: '#94A3B8' })[s];
 
 const CREW_STYLE: Record<string, { c: string; label: string; p: string }> = {
   standby: { c: '#475569', label: 'Standby', p: PATHS.user },
-  en_route: { c: '#0284C7', label: 'En route', p: PATHS.truck },
-  on_scene: { c: '#0F172A', label: 'On scene', p: PATHS.flame },
+  en_route: { c: '#2563EB', label: 'En route', p: PATHS.truck },
+  on_scene: { c: '#133C34', label: 'On scene', p: PATHS.flame },
 };
 export interface RouteLine { coords: [number, number][]; primary?: boolean }
 
@@ -181,7 +181,7 @@ export class MapController {
     const ll: L.LatLngExpression = [fix.lat, fix.lon];
     if (!this.meMarker) {
       this.meMarker = L.marker(ll, { icon: L.divIcon({ className: '', iconSize: [28, 28], iconAnchor: [14, 14], html: '<div class="me-wrap"><div class="me-ping"></div><div class="me-halo"><div class="me-dot"></div></div><div class="me-cone" style="display:none"></div></div>' }), interactive: false, zIndexOffset: 1000 }).addTo(this.map);
-      this.meCircle = L.circle(ll, { radius: fix.acc, color: '#0284C7', weight: 1, opacity: 0.5, fillColor: '#0284C7', fillOpacity: 0.1, interactive: false }).addTo(this.map);
+      this.meCircle = L.circle(ll, { radius: fix.acc, color: '#2563EB', weight: 1, opacity: 0.5, fillColor: '#2563EB', fillOpacity: 0.1, interactive: false }).addTo(this.map);
     } else {
       this.meMarker.setLatLng(ll);
       this.meCircle!.setLatLng(ll).setRadius(fix.acc);
@@ -251,8 +251,8 @@ export class MapController {
       const t = this.threat.get(c.id);
       const hot = t === 'burning' || t === 'very_high' || t === 'high';
       const style = hot
-        ? `background:#DC2626;color:#fff;padding:2px 6px;border-radius:6px;box-shadow:0 1px 4px rgba(15,23,42,.5)`
-        : `color:#fff;text-shadow:0 0 3px rgba(15,23,42,.95),0 0 6px rgba(15,23,42,.7)`;
+        ? `background:#C7372D;color:#fff;padding:2px 6px;border-radius:6px;box-shadow:0 1px 4px rgba(20,33,29,.5)`
+        : `color:#fff;text-shadow:0 0 3px rgba(20,33,29,.95),0 0 6px rgba(20,33,29,.7)`;
       L.marker([la, lo], { interactive: false, keyboard: false, zIndexOffset: hot ? 400 : 0, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div style="position:absolute;left:0;top:0;transform:translate(-50%,-50%);font:700 ${size}px/1.1 -apple-system,system-ui,sans-serif;letter-spacing:.02em;white-space:nowrap;${style}">${esc(c.code)}</div>` }) }).addTo(g);
     }
   }
@@ -270,12 +270,12 @@ export class MapController {
       for (const c of this.last.s.compartments) {
         const lv = this.threat.get(c.id);
         if (lv !== 'burning' && lv !== 'very_high' && lv !== 'high') continue;
-        L.geoJSON(c.geojson as any, { style: { color: '#DC2626', weight: lv === 'high' ? 3 : 4.5, opacity: 0.95, fillColor: '#EF4444', fillOpacity: lv === 'high' ? 0.12 : 0.22, dashArray: lv === 'high' ? '6 5' : undefined }, interactive: false } as any).addTo(g);
+        L.geoJSON(c.geojson as any, { style: { color: '#C7372D', weight: lv === 'high' ? 3 : 4.5, opacity: 0.95, fillColor: '#E2483D', fillOpacity: lv === 'high' ? 0.12 : 0.22, dashArray: lv === 'high' ? '6 5' : undefined }, interactive: false } as any).addTo(g);
       }
-      if (sp.ellipse) L.polygon(sp.ellipse, { renderer: this.canvas, color: '#EF4444', weight: 2, dashArray: '4 6', fillColor: '#EF4444', fillOpacity: 0.1, interactive: false }).addTo(g);
+      if (sp.ellipse) L.polygon(sp.ellipse, { renderer: this.canvas, color: '#E2483D', weight: 2, dashArray: '4 6', fillColor: '#E2483D', fillOpacity: 0.1, interactive: false }).addTo(g);
       if (sp.windFrom != null) {
         const down = (sp.windFrom + 180) % 360;
-        L.marker([sp.fire.lat, sp.fire.lon], { interactive: false, zIndexOffset: -10, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div style="position:absolute;left:0;top:0;width:0;height:0;transform:rotate(${down}deg)"><svg width="26" height="90" viewBox="0 0 26 90" style="position:absolute;left:-13px;top:-90px;overflow:visible"><path d="M13 88 V18" stroke="#0F172A" stroke-width="7" stroke-linecap="round" opacity=".55"/><path d="M13 88 V18" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><path d="M2 22 L13 2 L24 22 Z" fill="#fff" stroke="#0F172A" stroke-width="1.5" stroke-linejoin="round"/></svg></div>` }) }).addTo(g);
+        L.marker([sp.fire.lat, sp.fire.lon], { interactive: false, zIndexOffset: -10, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div style="position:absolute;left:0;top:0;width:0;height:0;transform:rotate(${down}deg)"><svg width="26" height="90" viewBox="0 0 26 90" style="position:absolute;left:-13px;top:-90px;overflow:visible"><path d="M13 88 V18" stroke="#133C34" stroke-width="7" stroke-linecap="round" opacity=".55"/><path d="M13 88 V18" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><path d="M2 22 L13 2 L24 22 Z" fill="#fff" stroke="#133C34" stroke-width="1.5" stroke-linejoin="round"/></svg></div>` }) }).addTo(g);
       }
     }
     if (this.last) this.renderCompLabels(this.last.s);
@@ -311,7 +311,7 @@ export class MapController {
     const g = this.g.routes;
     g.clearLayers();
     for (const r of routes.filter((x) => !x.primary)) {
-      L.polyline(r.coords, { renderer: this.canvas, color: '#0284C7', weight: 2.5, opacity: 0.8, dashArray: '2 6', lineCap: 'round', interactive: false }).addTo(g);
+      L.polyline(r.coords, { renderer: this.canvas, color: '#2563EB', weight: 2.5, opacity: 0.8, dashArray: '2 6', lineCap: 'round', interactive: false }).addTo(g);
     }
     for (const r of routes.filter((x) => x.primary)) {
       // route = [you, onto the network, ...roads..., off the network, fire]: the first and last legs are on foot (dashed)
@@ -319,13 +319,13 @@ export class MapController {
       const road = c.length > 3 ? c.slice(1, -1) : c;
       if (c.length > 3) for (const leg of [[c[0], c[1]], [c[c.length - 2], c[c.length - 1]]] as [number, number][][]) {
         L.polyline(leg, { renderer: this.canvas, color: '#FFFFFF', weight: 7, opacity: 0.9, lineCap: 'round', interactive: false }).addTo(g);
-        L.polyline(leg, { renderer: this.canvas, color: '#0284C7', weight: 4, dashArray: '2 8', lineCap: 'round', interactive: false }).addTo(g);
+        L.polyline(leg, { renderer: this.canvas, color: '#2563EB', weight: 4, dashArray: '2 8', lineCap: 'round', interactive: false }).addTo(g);
       }
       L.polyline(road, { renderer: this.canvas, color: '#FFFFFF', weight: 9, opacity: 0.95, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(g);
-      L.polyline(road, { renderer: this.canvas, color: '#0284C7', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(g);
+      L.polyline(road, { renderer: this.canvas, color: '#2563EB', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(g);
       // make the start obvious: the route always begins at the user's own GPS position
       const [la, lo] = r.coords[0];
-      L.marker([la, lo], { interactive: false, zIndexOffset: 1100, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div style="position:absolute;left:0;top:0;transform:translate(-50%,calc(-100% - 16px));background:#0284C7;color:#fff;font:700 11px/1 -apple-system,system-ui,sans-serif;padding:4px 7px;border-radius:9999px;white-space:nowrap;box-shadow:0 2px 6px rgba(15,23,42,.35)">You</div>` }) }).addTo(g);
+      L.marker([la, lo], { interactive: false, zIndexOffset: 1100, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div style="position:absolute;left:0;top:0;transform:translate(-50%,calc(-100% - 16px));background:#2563EB;color:#fff;font:700 11px/1 -apple-system,system-ui,sans-serif;padding:4px 7px;border-radius:9999px;white-space:nowrap;box-shadow:0 2px 6px rgba(20,33,29,.35)">You</div>` }) }).addTo(g);
     }
   }
 
@@ -396,7 +396,7 @@ export class MapController {
     if (!s.layers.roads) return;
     for (const r of s.roads) {
       L.geoJSON(r.geojson as any, { style: { color: CASING, weight: 5.5, opacity: 0.5 }, interactive: false } as any).addTo(this.g.roads);
-      L.geoJSON(r.geojson as any, { style: { color: r.passable ? '#F8FAFC' : '#EF4444', weight: 2.8, dashArray: r.passable ? undefined : '4 6', opacity: 0.95 } })
+      L.geoJSON(r.geojson as any, { style: { color: r.passable ? '#F8FAFC' : '#E2483D', weight: 2.8, dashArray: r.passable ? undefined : '4 6', opacity: 0.95 } })
         .bindTooltip(esc(r.name + (r.props?.Status ? ` · ${r.props.Status}` : '') + (r.passable ? '' : ' — NOT PASSABLE'))).addTo(this.g.roads);
     }
   }
@@ -419,7 +419,7 @@ export class MapController {
     this.g.hazards.clearLayers();
     if (!s.layers.hazards) return;
     for (const h of s.hazards)
-      if (!h.resolved_at) L.marker([h.lat, h.lon], { icon: pin('#DC2626', ICON.alert, 26) }).bindTooltip(esc(`Hazard: ${h.kind.replace('_', ' ')}${h.note ? ' — ' + h.note : ''}`)).addTo(this.g.hazards);
+      if (!h.resolved_at) L.marker([h.lat, h.lon], { icon: pin('#C7372D', ICON.alert, 26) }).bindTooltip(esc(`Hazard: ${h.kind.replace('_', ' ')}${h.note ? ' — ' + h.note : ''}`)).addTo(this.g.hazards);
   }
 
   private renderPerimeters(s: MapData) {
@@ -428,7 +428,7 @@ export class MapController {
       const ll = p.vertices.map((v: Vertex) => [v.lat, v.lon] as [number, number]);
       const st = s.incidents.find((i) => i.id === p.incident_id)?.status;
       // green once the fire is contained or better, red while it is still active
-      const col = st === 'contained' || st === 'controlled' || st === 'out' ? '#16A34A' : '#EF4444';
+      const col = st === 'contained' || st === 'controlled' || st === 'out' ? '#2F8F5B' : '#E2483D';
       if (p.state === 'closed' && ll.length >= 3) L.polygon(ll, { renderer: this.canvas, color: col, weight: 3, fillColor: col, fillOpacity: 0.22 }).addTo(this.g.perimeters);
       else if (ll.length) L.polyline(ll, { renderer: this.canvas, color: col, weight: 4 }).addTo(this.g.perimeters);
     }
@@ -446,7 +446,7 @@ export class MapController {
         ? callout(`<span class="callout-ico sq ${i.status !== 'reported' ? 'pulse' : ''}" style="background:${col}">${SVG(PATHS.flame, 18)}</span><span style="display:flex;flex-direction:column;padding-right:4px"><span style="font-weight:700;font-size:13px">${esc(i.code ?? i.label)} <span style="display:inline-block;width:6px;height:6px;border-radius:9999px;background:${col}"></span></span><span class="sub" style="color:${i.status === 'reported' ? '#B91C1C' : col}">${esc(sub)}</span></span>`, col, true)
         : pin(col, ICON.flame, 24);
       const m = L.marker([i.lat, i.lon], { icon, zIndexOffset: sel ? 900 : open ? 500 : 0, opacity: open ? 1 : 0.6 });
-      if (sel) setTimeout(() => (m.getElement()?.querySelector('.callout-body') as HTMLElement | null)?.style.setProperty('outline', '2px solid #0F172A'));
+      if (sel) setTimeout(() => (m.getElement()?.querySelector('.callout-body') as HTMLElement | null)?.style.setProperty('outline', '2px solid #133C34'));
       m.on('click', () => o.onIncident?.(i.id));
       m.addTo(this.g.incidents);
     }
