@@ -54,6 +54,7 @@ export function ReportScreen({ detection }: { detection: string | null }) {
     ctl.current = c;
     c.setBasemap(getState().basemap);
     c.render(getState());
+    c.setPick(true); // every tap places the fire, inside a compartment or not
     c.onClick((lat, lon) => { setPin({ lat, lon }); setMode('map'); });
     return () => c.destroy();
   }, []);

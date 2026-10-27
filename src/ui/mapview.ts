@@ -194,6 +194,10 @@ export class MapController {
     }
   }
 
+  /** While true, taps inside compartments place points (report, measure, move) instead of opening details. */
+  private pick = false;
+  setPick(on: boolean) { this.pick = on; if (on) this.map.closePopup(); }
+
   onClick(fn: ((lat: number, lon: number) => void) | null) {
     if (this.clickHandler) this.map.off('click', this.clickHandler);
     this.clickHandler = fn ? (e) => fn(e.latlng.lat, e.latlng.lng) : null;
@@ -371,9 +375,7 @@ export class MapController {
     for (const c of s.compartments) {
       const r = RISK[c.risk_class] ?? RISK.moderate;
       L.geoJSON(c.geojson as any, { style: { color: CASING, weight: r.w + 2.6, opacity: 0.6, fill: false }, interactive: false } as any).addTo(this.g.compartments);
-      L.geoJSON(c.geojson as any, { style: { color: r.c, weight: r.w, opacity: 1, fillColor: r.c, fillOpacity: r.f } })
-        .bindTooltip(esc(`${c.code} · ${r.label} risk`), { permanent: false, direction: 'center' })
-        .bindPopup(() => {
+      const info = () => {
           const p = (c.props ?? {}) as Record<string, unknown>;
           const rows = [
             p.area_ha != null && fmtProp('area', `${p.area_ha} ha`),
@@ -386,6 +388,14 @@ export class MapController {
             c.treatment_status && fmtProp('treatment', c.treatment_status),
           ].filter(Boolean).join('');
           return `<b>${esc(c.code)}</b> · ${esc(c.block)}<table style="margin-top:4px;font-size:12px">${rows}</table>${p.risk_basis ? `<div style="margin-top:4px;font-size:11px;color:#475569">Risk basis: ${esc(String(p.risk_basis))}</div>` : ''}`;
+      };
+      // A tap inside a compartment shows its details, unless the screen is placing something
+      // (fire pin, measuring, moving a pin): then the tap goes to the screen like any map tap.
+      L.geoJSON(c.geojson as any, { style: { color: r.c, weight: r.w, opacity: 1, fillColor: r.c, fillOpacity: r.f }, bubblingMouseEvents: false } as any)
+        .bindTooltip(esc(`${c.code} · ${r.label} risk`), { permanent: false, direction: 'center' })
+        .on('click', (e: L.LeafletMouseEvent) => {
+          if (this.pick && this.clickHandler) this.clickHandler(e);
+          else L.popup().setLatLng(e.latlng).setContent(info()).openOn(this.map);
         })
         .addTo(this.g.compartments);
     }

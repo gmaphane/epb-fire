@@ -100,6 +100,7 @@ export function MapScreen() {
     const c = ctl.current!;
     const grp = c.extra();
     grp.clearLayers();
+    c.setPick(!!moving || measure !== null); // placing points: taps inside compartments count too
     if (moving) {
       // move-pin mode: the next tap chooses the new position (confirmed in the banner)
       c.onClick((lat, lon) => { c.map.closePopup(); setMoveTo([lat, lon]); });

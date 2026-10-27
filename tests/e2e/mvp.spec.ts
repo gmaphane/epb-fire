@@ -214,3 +214,14 @@ test('radio relay: camp types in coordinates read out from the field', async () 
   await expect(page.getByTestId('readout')).toContainText('UTM 30N');
   await page.screenshot({ path: 'shots/16-readout.png' });
 });
+
+test('report: tapping inside a compartment places the fire there (not a popup)', async () => {
+  await page.goto('/#/report');
+  await expect(page.getByTestId('report-coords')).toContainText(/\d/, { timeout: 10000 });
+  const before = await page.getByTestId('report-coords').innerText();
+  const box = (await page.getByTestId('report-map').boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.8, box.y + box.height * 0.8);
+  await expect(page.getByTestId('loc-map')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('report-coords')).not.toHaveText(before);
+  await expect(page.locator('.leaflet-popup')).toHaveCount(0);
+});

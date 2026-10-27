@@ -14,6 +14,7 @@ Deno.serve(async (req) => {
     if (event === 'test') {
       if (who.kind !== 'user') return json({ error: 'test needs a signed-in user' }, 400);
       const r = await sendPush([who.id], { title: 'Test alert', body: 'Fire alerts are working on this phone.', url: '/#/map', tag: 'test', kind: 'test' });
+      console.log(JSON.stringify({ alert: 'test', ...r }));
       return json(r);
     }
 
@@ -31,6 +32,7 @@ Deno.serve(async (req) => {
         body: [crew?.name, i?.code ?? i?.label, a.instruction, i ? dd(i.lat, i.lon) : null].filter(Boolean).join(' · '),
         url: `/#/incident/${a.incident_id}`, tag: `dispatch-${a.id}`, urgent: true, kind: 'dispatch',
       });
+      console.log(JSON.stringify({ alert: 'dispatch', recipients: to.length, ...r }));
       return json(r);
     }
 
@@ -43,6 +45,7 @@ Deno.serve(async (req) => {
         body: `${i.status === 'reported' ? 'Unverified' : i.status} · by ${i.reported_by_name} · ${dd(i.lat, i.lon)}`,
         url: `/#/incident/${i.id}`, tag: `incident-${i.id}`, urgent: true, kind: 'incident',
       });
+      console.log(JSON.stringify({ alert: 'incident', code: i.code, recipients: to.length, ...r }));
       return json(r);
     }
 
