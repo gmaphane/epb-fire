@@ -19,10 +19,22 @@ describe('route', () => {
     expect(r.etaMin).toBeLessThan(20);
     expect(r.coords[0]).toEqual([6.8002, -0.8295]);
   });
-  it('walks straight when tracks do not help', () => {
+  it('on foot also follows the tracks (crews stay on the network)', () => {
     const r = route(roads, layers, { lat: 6.8002, lon: -0.8295 }, { lat: 6.8198, lon: -0.8002 }, 'walk');
-    expect(r.viaTracks).toBe(false);
-    expect(r.coords).toHaveLength(2);
+    expect(r.viaTracks).toBe(true);
+    expect(r.onTrackM).toBeGreaterThan(5000);
+    expect(r.coords.length).toBeGreaterThan(3);
+  });
+  it('short trips use the network too', () => {
+    const r = route(roads, layers, { lat: 6.8003, lon: -0.825 }, { lat: 6.8003, lon: -0.818 }, 'drive');
+    expect(r.viaTracks).toBe(true);
+    expect(r.offRoadM).toBeLessThan(80);
+  });
+  it('snaps both ends onto one connected track system', () => {
+    const island: Road[] = [...roads, { id: 'r4', name: 'island', passable: true, geojson: { type: 'LineString', coordinates: [[-0.79, 6.83], [-0.789, 6.831]] } }];
+    const r = route(island, layers, { lat: 6.8002, lon: -0.8295 }, { lat: 6.8295, lon: -0.7905 }, 'drive');
+    expect(r.viaTracks).toBe(true);
+    expect(r.onTrackM).toBeGreaterThan(5000);
   });
   it('falls back with no network data', () => {
     const r = route([], [], { lat: 6.8, lon: -0.8 }, { lat: 6.81, lon: -0.8 });

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'preact/hooks';
-import { BellRing, Flame, List, Map as MapIcon, Settings, Users, Search, X, Droplets, MapPin, Square } from 'lucide-preact';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { BellRing, Flame, Satellite, List, Map as MapIcon, Settings, Users, Search, X, Droplets, MapPin, Square } from 'lucide-preact';
 import { assignmentAction } from '../core/actions';
-import { startAlarm, stopAlarm } from '../core/alarm';
+import { chime, startAlarm, stopAlarm } from '../core/alarm';
+import { isOpen } from '../core/flow';
 import { getState, setState, useStore } from '../core/store';
 import { go, useGps, useRoute } from './hooks';
 import { cx, GpsChip, StatusChip, SyncChip } from './kit';
@@ -55,6 +56,48 @@ function AlarmBanner() {
           <button data-testid="alarm-ack" class="press flex-1 min-h-[52px] rounded-pill bg-white text-fire-dark font-semibold text-[16px]" onClick={() => void assignmentAction(a, 'ack')}>Acknowledge</button>
           <button class="press min-h-[52px] px-5 rounded-pill bg-white/15 font-semibold" onClick={() => go('incident/' + a.incident_id)}>View</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Tells everyone, inside the app, when a fire is reported or a satellite hotspot is seen near the estate.
+ *  (Push alerts cover the phone when the app is closed.) Fires already on the phone at start-up are not re-announced. */
+function NewFireAlert() {
+  const { me, incidents, detections } = useStore((s) => ({ me: s.me, incidents: s.incidents, detections: s.detections }));
+  const seen = useRef<Set<string> | null>(null);
+  const [alert, setAlert] = useState<{ kind: 'fire' | 'hotspot'; go: string; title: string; sub: string; more: number } | null>(null);
+  useEffect(() => {
+    const ids = [...incidents.map((i) => 'i' + i.id), ...detections.map((d) => 'd' + d.id)];
+    if (!seen.current) { seen.current = new Set(ids); return; }
+    const recent = (t: string) => Date.now() - new Date(t).getTime() < 6 * 3600_000;
+    const fires = incidents.filter((i) => !seen.current!.has('i' + i.id) && !i.deleted_at && isOpen(i.status) && i.reported_by !== me?.id && recent(i.reported_at));
+    const spots = detections.filter((d) => !seen.current!.has('d' + d.id) && !d.promoted_incident_id && d.distance_m != null && d.distance_m <= 2000 && recent(d.acq_time));
+    ids.forEach((k) => seen.current!.add(k));
+    if (!fires.length && !spots.length) return;
+    const a = fires.length
+      ? { kind: 'fire' as const, go: 'incident/' + fires[0].id, title: `New fire · ${fires[0].compartment ?? fires[0].block ?? 'unmapped area'}`, sub: `${fires[0].status === 'reported' ? 'Unverified' : 'Confirmed'} · ${fires[0].reported_by_name ?? 'reported'} · ${ago(fires[0].reported_at)}`, more: fires.length - 1 + spots.length }
+      : { kind: 'hotspot' as const, go: 'incidents', title: `Satellite hotspot · ${spots[0].compartment ?? 'near the estate'}`, sub: `${spots[0].confidence} confidence · ${ago(spots[0].acq_time)} · unverified`, more: spots.length - 1 };
+    setAlert(a);
+    chime();
+    // the app is open but in the background: show it in the phone's notification shade too
+    try {
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted')
+        void navigator.serviceWorker?.ready.then((r) => r.showNotification(a.title, { body: a.sub, tag: a.go, data: { url: '/#/' + a.go } } as NotificationOptions));
+    } catch { /* ignore */ }
+  }, [incidents, detections]);
+  useEffect(() => { if (!alert) return; const t = setTimeout(() => setAlert(null), 30_000); return () => clearTimeout(t); }, [alert]);
+  if (!alert) return null;
+  return (
+    <div role="alert" data-testid="new-fire-alert" class="fixed top-0 inset-x-0 z-[1990] pt-safe px-3 sheet-enter">
+      <div class="mt-2 rounded-[24px] bg-card shadow-l3 border border-line p-3 pr-2 flex items-center gap-3">
+        <span class={cx('w-11 h-11 rounded-full flex items-center justify-center shrink-0', alert.kind === 'fire' ? 'bg-fire text-on-fire pulse' : 'bg-sat-bg text-sat')}>{alert.kind === 'fire' ? <Flame size={20} fill="currentColor" /> : <Satellite size={20} />}</span>
+        <button class="flex-1 min-w-0 text-left" onClick={() => { setAlert(null); go(alert.go); }}>
+          <span class="block text-[16px] font-semibold truncate">{alert.title}</span>
+          <span class="block text-[13px] text-muted truncate">{alert.sub}{alert.more > 0 ? ` · +${alert.more} more` : ''}</span>
+        </button>
+        <button class="press h-10 px-4 rounded-pill bg-brand text-on-brand text-[14px] font-semibold shrink-0" onClick={() => { setAlert(null); go(alert.go); }}>View</button>
+        <button aria-label="Dismiss" class="press w-9 h-9 rounded-full flex items-center justify-center text-muted shrink-0" onClick={() => setAlert(null)}><X size={18} /></button>
       </div>
     </div>
   );
@@ -180,6 +223,7 @@ export function App() {
   return (
     <div class="h-full flex flex-col relative bg-surface" data-night={night}>
       <AlarmBanner />
+      <NewFireAlert />
       <div class="flex-1 min-h-0 relative">{screen}</div>
       {showFab && (onMap ? (
         // On the map: the red button at the foot of the tool rail, clear of any sheet

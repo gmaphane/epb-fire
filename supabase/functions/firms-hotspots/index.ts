@@ -1,7 +1,7 @@
 // Satellite hotspots (NASA FIRMS, VIIRS + MODIS near-real-time) over the estate, every 30 min.
-// New hotspots inside or within 2 km of a compartment raise a push alert to coordinators.
-// Needs the free FIRMS MAP_KEY as the edge-function secret FIRMS_MAP_KEY.
-import { caller, COORDINATORS, dd, json, sb, sendPush, users } from '../_shared/alerts.ts';
+// New hotspots inside or within 2 km of a compartment raise a push alert to everyone.
+// Needs the free FIRMS MAP_KEY: edge-function secret FIRMS_MAP_KEY, or private.app_keys 'firms_map_key'.
+import { appKey, caller, dd, json, sb, sendPush, users } from '../_shared/alerts.ts';
 
 // estate extent + ~5 km (west, south, east, north)
 const AREA = '-1.10,6.70,-0.71,6.95';
@@ -30,8 +30,8 @@ const conf = (src: string, c: string) => {
 Deno.serve(async (req) => {
   const who = await caller(req);
   if (!who || (who.kind === 'user' && who.role !== 'admin')) return json({ error: 'unauthorised' }, 401);
-  const MAP_KEY = Deno.env.get('FIRMS_MAP_KEY');
-  if (!MAP_KEY) return json({ skipped: 'FIRMS_MAP_KEY secret not set' });
+  const MAP_KEY = Deno.env.get('FIRMS_MAP_KEY') || (await appKey('firms_map_key'));
+  if (!MAP_KEY) return json({ skipped: 'FIRMS map key not set' });
 
   const fresh: { id: string; lat: number; lon: number; source: string; acq_time: string; confidence: string }[] = [];
   const errors: string[] = [];
@@ -40,6 +40,7 @@ Deno.serve(async (req) => {
       const res = await fetch(`https://firms.modaps.eosdis.nasa.gov/api/area/csv/${MAP_KEY}/${src}/${AREA}/1`);
       const text = await res.text();
       if (!res.ok) { errors.push(`${src}: HTTP ${res.status}`); continue; }
+      if (/invalid|error/i.test(text.slice(0, 100)) && !text.startsWith('latitude')) { errors.push(`${src}: ${text.slice(0, 120)}`); continue; }
       const rows = parseCsv(text);
       if (!rows.length) continue;
       const recs = await Promise.all(rows.map(async (r) => {
@@ -71,7 +72,7 @@ Deno.serve(async (req) => {
     const f = near[0];
     const where = f.dist < 1 ? `inside ${f.code}` : `${Math.round(f.dist / 10) * 10} m from ${f.code}`;
     const hhmm = f.d.acq_time.slice(11, 16);
-    push = await sendPush(await users({ roles: COORDINATORS }), {
+    push = await sendPush(await users({ all: true }), {
       title: near.length > 1 ? `${near.length} satellite hotspots near the estate` : `Satellite hotspot ${where}`,
       body: `${near.length > 1 ? `Closest ${where} · ` : ''}${f.d.source.replace('_NRT', '')} pass ${hhmm} UTC · ${f.d.confidence} confidence · ${dd(f.d.lat, f.d.lon)}. Unverified: check before calling crews.`,
       url: '/#/map', tag: 'hotspots', urgent: true, kind: 'hotspot',

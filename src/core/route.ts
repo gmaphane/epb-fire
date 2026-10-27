@@ -6,8 +6,7 @@ import type { MapLayer, Road } from './types';
  * Works offline: the graph is built from data already on the phone.
  *
  * Start and goal are snapped onto the nearest track segment; the bit between the
- * point and the track is walked (off-road leg). If walking straight is faster,
- * the straight line wins, so the route is never worse than the old "as the crow flies".
+ * point and the track is walked (off-road leg). The route always follows the network.
  */
 
 export type Mode = 'walk' | 'drive';
@@ -26,6 +25,7 @@ interface Graph {
   lon: Float64Array;
   adj: Edge[][];
   segs: { a: number; b: number; kind: Edge['kind'] }[];
+  comp: Int32Array; // connected-component id per node
 }
 
 const R = 6371008.8;
@@ -110,16 +110,26 @@ export function buildGraph(roads: Road[], layers: MapLayer[], withFirebreaks = t
     if (best >= 0) link(i, best, adj[i][0].kind);
   }
 
-  const g: Graph = { lat: Float64Array.from(lat), lon: Float64Array.from(lon), adj, segs };
+  // connected components, so start and goal can be snapped onto the same track system
+  const comp = new Int32Array(n).fill(-1);
+  let cid = 0;
+  for (let i = 0; i < n; i++) {
+    if (comp[i] >= 0) continue;
+    const stack = [i]; comp[i] = cid;
+    while (stack.length) { const u = stack.pop()!; for (const e of adj[u]) if (comp[e.to] < 0) { comp[e.to] = cid; stack.push(e.to); } }
+    cid++;
+  }
+  const g: Graph = { lat: Float64Array.from(lat), lon: Float64Array.from(lon), adj, segs, comp };
   caches.set(ck, { roads, layers, g });
   return g;
 }
 
 /** Nearest point on any segment: returns the segment and the projected point. */
-function snap(g: Graph, y: number, x: number) {
+function snap(g: Graph, y: number, x: number, onlyComp = -1) {
   const kx = kLon(y);
   let best = { d: Infinity, s: -1, t: 0, y: 0, x: 0 };
   g.segs.forEach((s, si) => {
+    if (onlyComp >= 0 && g.comp[s.a] !== onlyComp) return;
     const ax = (g.lon[s.a] - x) * kx, ay = (g.lat[s.a] - y) * K_LAT;
     const bx = (g.lon[s.b] - x) * kx, by = (g.lat[s.b] - y) * K_LAT;
     const vx = bx - ax, vy = by - ay;
@@ -167,7 +177,8 @@ class Heap {
   }
 }
 
-/** Fastest route from (lat1,lon1) to (lat2,lon2). Straight walk is the fallback. */
+/** Shortest route over the track network from (lat1,lon1) to (lat2,lon2): roads by vehicle, roads + firebreaks on foot.
+ *  The only off-network parts are the walk from the start to the nearest track and from the track to the goal. */
 export function route(roads: Road[], layers: MapLayer[], from: { lat: number; lon: number }, to: { lat: number; lon: number }, mode: Mode = 'drive'): Route {
   const straightM = distM(from.lat, from.lon, to.lat, to.lon);
   const walkMin = (m: number) => (m / 1000 / CONFIG.walkSpeedKmh) * 60;
@@ -175,8 +186,14 @@ export function route(roads: Road[], layers: MapLayer[], from: { lat: number; lo
   const g = buildGraph(roads, layers, mode === 'walk');
   if (!g.segs.length || straightM < 60) return direct;
 
-  const sA = snap(g, from.lat, from.lon), sB = snap(g, to.lat, to.lon);
+  let sA = snap(g, from.lat, from.lon), sB = snap(g, to.lat, to.lon);
   if (sA.s < 0 || sB.s < 0) return direct;
+  const cA = g.comp[g.segs[sA.s].a], cB = g.comp[g.segs[sB.s].a];
+  if (cA !== cB) {
+    // nearest tracks are on separate systems: put both ends on one system, whichever adds the least walking
+    const b2 = snap(g, to.lat, to.lon, cA), a2 = snap(g, from.lat, from.lon, cB);
+    if (b2.d - sB.d <= a2.d - sA.d) sB = b2; else sA = a2;
+  }
   const n = g.lat.length;
   const S = n, T = n + 1; // virtual nodes on the snapped points
   const lat = (i: number) => (i === S ? sA.y : i === T ? sB.y : g.lat[i]);
@@ -220,7 +237,9 @@ export function route(roads: Road[], layers: MapLayer[], from: { lat: number; lo
   for (let i = 1; i < path.length; i++) onTrackM += distM(lat(path[i - 1]), lon(path[i - 1]), lat(path[i]), lon(path[i]));
   const offRoadM = sA.d + sB.d;
   const etaMin = dist[T] + walkMin(offRoadM);
-  if (etaMin >= direct.etaMin) return direct;
+  // Always follow the network (crews must stay on roads / firebreaks). Only fall back to a straight line
+  // when the network path is absurd, e.g. the two ends sit on separate, unconnected track systems.
+  if (onTrackM > Math.max(20 * straightM, straightM + 15_000)) return direct;
   const coords: [number, number][] = [[from.lat, from.lon], ...path.map((i) => [lat(i), lon(i)] as [number, number]), [to.lat, to.lon]];
   return { coords, distM: onTrackM + offRoadM, onTrackM, offRoadM, etaMin, viaTracks: true };
 }

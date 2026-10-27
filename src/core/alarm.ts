@@ -56,3 +56,15 @@ export const alarmOn = () => timer !== null;
 if (typeof window !== 'undefined') {
   window.addEventListener('pointerdown', unlockAudio, { once: true, passive: true });
 }
+
+/** One short two-tone chime + buzz for a new fire or hotspot (not repeating, unlike a call-out). */
+export function chime() {
+  unlockAudio();
+  beep(988, 0, 0.18);
+  beep(740, 0.22, 0.28);
+  try {
+    navigator.vibrate?.([200, 100, 200]);
+  } catch {
+    /* ignore */
+  }
+}

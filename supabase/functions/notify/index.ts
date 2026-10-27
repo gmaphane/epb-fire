@@ -1,5 +1,5 @@
-// Push alerts for call-outs and new fire reports (called by database triggers), plus a "send test" for users.
-import { caller, COORDINATORS, dd, ensureVapid, json, sb, sendPush, users } from '../_shared/alerts.ts';
+// Push alerts for call-outs (the crew) and new fire reports (everyone), called by database triggers, plus a "send test".
+import { caller, dd, ensureVapid, json, sb, sendPush, users } from '../_shared/alerts.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return json({ ok: true });
@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
     if (event === 'incident') {
       const { data: i } = await sb.from('incidents').select('*').eq('id', body.id).single();
       if (!i) return json({ skipped: 'no incident' });
-      const to = await users({ roles: COORDINATORS, except: i.reported_by });
+      const to = await users({ all: true, except: i.reported_by }); // every crew member and coordinator, not just control
       const r = await sendPush(to, {
         title: `Fire reported · ${i.compartment ?? i.block ?? 'unmapped area'}`,
         body: `${i.status === 'reported' ? 'Unverified' : i.status} · by ${i.reported_by_name} · ${dd(i.lat, i.lon)}`,
