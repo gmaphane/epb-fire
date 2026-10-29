@@ -6,7 +6,7 @@ import { AppBar } from './kit';
 import { go, useGps, useNow } from './hooks';
 import { ago } from '../core/time';
 import { bearingDeg, cardinal, fmtDistance, fmtHa, haversineM } from '../core/geo';
-import { can, isOpen } from '../core/flow';
+import { afterOut, can, isOpen } from '../core/flow';
 import type { Assignment, Incident } from '../core/types';
 import type { SyncState } from '../core/sync';
 
@@ -105,7 +105,9 @@ function IncidentCard({ i, here, now, canDispatch, canPerimeter, assigns }: { i:
           <div class="text-[13px] text-muted truncate">{i.code ?? i.label} · {sub}</div>
           <div class="flex items-center gap-2 mt-2 flex-wrap">
             <StatusChip s={i.status} short />
-            {assigns.length > 0 && <span class="text-[12px] text-muted">{onScene}/{assigns.length} crews on scene</span>}
+            {i.category && <span class="text-[12px] font-semibold px-2 py-0.5 rounded-pill bg-sc text-ink" data-testid="cat-chip">Cat {i.category}</span>}
+            {i.status === 'out' && i.out_at && <FollowUp i={i} now={now} />}
+            {open && assigns.length > 0 && <span class="text-[12px] text-muted">{onScene}/{assigns.length} crews on scene</span>}
             {i._sync && i._sync !== 'synced' && <span data-testid="row-pending" class="text-[12px] font-medium text-amber">On this phone</span>}
           </div>
         </div>
@@ -121,4 +123,13 @@ function IncidentCard({ i, here, now, canDispatch, canPerimeter, assigns }: { i:
       )}
     </article>
   );
+}
+
+/** After Out (SOP 4.1): patrol still running, or the incident report not yet submitted. */
+function FollowUp({ i, now }: { i: Incident; now: number }) {
+  const a = afterOut(i.out_at!, i.category ?? null);
+  const hm = (t: number) => new Date(t).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  if (a.patrolUntil != null && a.patrolUntil > now) return <span class="text-[12px] font-semibold px-2 py-0.5 rounded-pill bg-amber-bg text-amber" data-testid="followup">Patrol until {hm(a.patrolUntil)}</span>;
+  if (!i.report_submitted_at) return <span class={cx('text-[12px] font-semibold px-2 py-0.5 rounded-pill', a.submitDue < now ? 'bg-fire-bg text-on-fire-bg' : 'bg-sc text-muted')} data-testid="followup">{a.submitDue < now ? 'Report overdue' : `Report due ${hm(a.submitDue)}`}</span>;
+  return null;
 }

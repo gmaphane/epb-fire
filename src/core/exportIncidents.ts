@@ -24,8 +24,8 @@ export function incidentsWorkbook(): Blob {
     return [
       i.code ?? i.label, STATUS_LABEL[i.status], dt(i.reported_at), i.reported_by_name, i.source, i.block ?? '', i.compartment ?? '',
       r1(i.lat, 6), r1(i.lon, 6), Math.round(u.e), Math.round(u.n), i.accuracy_m != null ? Math.round(i.accuracy_m) : null,
-      i.location_source, i.observer_name ?? '', i.relayed_via ?? '', i.size_class, r1(i.area_ha ?? per?.area_ha ?? null, 2),
-      per ? r1(per.length_km, 2) : null, crews, i.cause ?? '', i.dismiss_reason ?? '', dt(closedAt), i.notes ?? '',
+      i.location_source, i.observer_name ?? '', i.relayed_via ?? '', i.category ?? null, i.size_class, r1(i.area_ha ?? per?.area_ha ?? null, 2),
+      per ? r1(per.length_km, 2) : null, crews, i.cause ?? '', i.dismiss_reason ?? '', dt(i.out_at ?? closedAt), dt(i.report_submitted_at), i.notes ?? '',
     ];
   });
   const timeline: Cell[][] = [...s.events].sort((a, b) => (a.client_ts < b.client_ts ? -1 : 1)).map((e) => [
@@ -41,7 +41,7 @@ export function incidentsWorkbook(): Blob {
   const perims: Cell[][] = s.perimeters.map((p) => [code(p.incident_id), p.state, dt(p.started_at), dt(p.closed_at), r1(p.area_ha, 2), r1(p.length_km, 2), r1(p.walk_seconds / 60, 0), p.vertices.length]);
 
   return buildXlsx([
-    { name: 'Incidents', header: ['Code', 'Status', 'Reported (UTC)', 'Reported by', 'Source', 'Block', 'Compartment', 'Latitude', 'Longitude', 'UTM 30N E', 'UTM 30N N', 'GPS accuracy m', 'Location from', 'Observer', 'Relayed via', 'Size', 'Area ha', 'Perimeter km', 'Call-outs', 'Cause', 'False alarm reason', 'Out at (UTC)', 'Notes'], rows: inc },
+    { name: 'Incidents', header: ['Code', 'Status', 'Reported (UTC)', 'Reported by', 'Source', 'Block', 'Compartment', 'Latitude', 'Longitude', 'UTM 30N E', 'UTM 30N N', 'GPS accuracy m', 'Location from', 'Observer', 'Relayed via', 'SOP category', 'Size (old)', 'Area ha', 'Perimeter km', 'Call-outs', 'Cause', 'False alarm reason', 'Out at (UTC)', 'Report submitted (UTC)', 'Notes'], rows: inc },
     { name: 'Timeline', header: ['Incident', 'Time (UTC)', 'Event', 'By', 'Details', 'Latitude', 'Longitude'], rows: timeline },
     { name: 'Call-outs', header: ['Incident', 'Crew', 'State', 'Dispatched (UTC)', 'Acknowledged', 'En route', 'On scene', 'Minutes to move/arrive', 'Needed support', 'Instruction'], rows: callouts },
     { name: 'Perimeters', header: ['Incident', 'State', 'Started (UTC)', 'Closed (UTC)', 'Area ha', 'Length km', 'Walk minutes', 'Points'], rows: perims },

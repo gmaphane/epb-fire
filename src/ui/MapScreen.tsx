@@ -365,7 +365,7 @@ function IncidentCard({ inc, r, onClose, sharingFor, wx, threats: th, role, onMo
       <div class="flex items-start gap-2">
         <div class="flex-1 min-w-0">
           <h2 class="font-display text-[24px] leading-tight truncate">{title}</h2>
-          <div class="flex items-center gap-2 mt-1.5"><StatusChip s={inc.status} short /><span class="text-[13px] text-muted truncate">{inc.code ?? inc.label} · {ago(inc.reported_at)}</span></div>
+          <div class="flex items-center gap-2 mt-1.5"><StatusChip s={inc.status} short />{inc.category && <span class="text-[12px] font-semibold px-2 py-0.5 rounded-pill bg-sc text-ink shrink-0">Cat {inc.category}</span>}<span class="text-[13px] text-muted truncate">{inc.code ?? inc.label} · {ago(inc.reported_at)}</span></div>
         </div>
         {(canMove || canDelete) && (
           <div class="relative shrink-0">

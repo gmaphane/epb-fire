@@ -59,7 +59,8 @@ test('T11: cold start with no network; T1: report offline saves < 1 s and surviv
   await expect(page.getByTestId('report-coords')).toContainText('6.8287', { timeout: 10000 });
   await shot(page, '02-report');
   await page.getByTestId('src-tower').click();
-  await page.getByTestId('size-small').click();
+  await page.getByTestId('cat-2').click();
+  await expect(page.getByTestId('cat-hint')).toContainText('under 0.5 ha');
   await page.getByTestId('notes').fill('Smoke column NE of tower');
   await page.getByTestId('submit-report').click();
   await expect(page.getByTestId('inc-coords')).toBeVisible();
@@ -126,11 +127,26 @@ test('dispatch -> alarm -> acknowledge -> status flow -> close needs a cause', a
   // coordinator closes
   await page.goto('/#/sync'); await expect(page.getByTestId('count-pending')).toHaveText('0', { timeout: 15000 }); await page.getByTestId('signout').click(); await login(page, 'coordinator');
   await page.goto('/#/incidents'); await page.getByTestId('incident-card').first().click();
+  // SOP: category can change as the fire grows; Mop-up replaces "Controlled"
+  await page.getByTestId('cat-metric').click();
+  await page.getByTestId('setcat-3').click();
+  await expect(page.getByTestId('cat-metric')).toContainText('Cat 3');
+  await expect(page.getByTestId('cat-sop')).toContainText('24 crew');
+  await expect(page.getByTestId('status-controlled')).toHaveText('Mop-up');
   await page.getByTestId('status-out').click();
   await expect(page.getByTestId('confirm-out')).toBeDisabled();
   await page.getByTestId('cause').selectOption('Lightning');
   await page.getByTestId('confirm-out').click();
   await expect(page.getByTestId('timeline')).toContainText('Out (cold)');
+  // after Out: Fire Watch Patrol (Cat 3 = up to 24 h) and report deadlines; coordinator records the report
+  await expect(page.getByTestId('after-out')).toBeVisible();
+  await expect(page.getByTestId('patrol-on')).toContainText('Fire Watch Patrol on until');
+  await expect(page.getByTestId('patrol-row')).toContainText('Cat 3: 12–24 h');
+  await page.getByTestId('report-done').click();
+  await expect(page.getByTestId('submit-row')).toContainText('Done');
+  await page.goto('/#/incidents');
+  await page.getByRole('button', { name: 'Closed' }).click();
+  await expect(page.getByTestId('followup').first()).toContainText('Patrol until');
   await shot(page, '08-closed');
 });
 

@@ -1,6 +1,6 @@
 import { CONFIG } from '../config';
 import { getBlob, getRow, metaSet, putBlob, putLocal } from './db';
-import { allowedNext } from './flow';
+import { allowedNext, can, CATEGORY, sizeFromCategory, type Category } from './flow';
 import { haversineM, pointInPolygon, polygonStats, shortLabel, uuid } from './geo';
 import { gps, keepAwake } from './gps';
 import { getState } from './store';
@@ -46,6 +46,7 @@ export function nearbyOpenIncidents(lat: number, lon: number, radiusM = CONFIG.d
 export interface ReportInput {
   source: Incident['source'];
   size_class: Incident['size_class'];
+  category?: Incident['category'];
   notes: string;
   lat: number;
   lon: number;
@@ -65,7 +66,7 @@ export async function reportFire(inp: ReportInput): Promise<Incident> {
   const now = nowIso();
   const loc = locate(inp.lat, inp.lon);
   const inc: Incident = {
-    id: uuid(), code: null, label: shortLabel(), status: 'reported', source: inp.source, size_class: inp.size_class,
+    id: uuid(), code: null, label: shortLabel(), status: 'reported', source: inp.source, size_class: inp.size_class, category: inp.category ?? null, out_at: null, report_submitted_at: null,
     notes: inp.notes, lat: inp.lat, lon: inp.lon, accuracy_m: inp.accuracy_m, location_estimated: inp.estimated,
     block: loc.block, compartment: loc.compartment, reported_by: m.id, reported_by_name: m.name, reported_at: now,
     client_updated_at: now, cause: null, area_ha: null, dismiss_reason: null, detection_id: inp.detection_id ?? null, deleted_at: null,
@@ -73,7 +74,7 @@ export async function reportFire(inp: ReportInput): Promise<Incident> {
     observer_name: inp.observer_name?.trim() || null, relayed_via: inp.relayed_via ?? null, observed_at: inp.observed_at ?? null,
   };
   await putLocal('incidents', inc);
-  await logEvent(inc.id, 'reported', { source: inp.source, size_class: inp.size_class, notes: inp.notes, location_source: inc.location_source, observer_name: inc.observer_name, relayed_via: inc.relayed_via, observed_at: inc.observed_at }, { lat: inp.lat, lon: inp.lon, acc: inp.accuracy_m });
+  await logEvent(inc.id, 'reported', { source: inp.source, size_class: inp.size_class, category: inp.category ?? null, notes: inp.notes, location_source: inc.location_source, observer_name: inc.observer_name, relayed_via: inc.relayed_via, observed_at: inc.observed_at }, { lat: inp.lat, lon: inp.lon, acc: inp.accuracy_m });
   if (inp.detection_id) {
     const d = await getRow<any>('detections', inp.detection_id);
     if (d) await putLocal('detections', { ...d, promoted_incident_id: inc.id, client_updated_at: now });
@@ -90,8 +91,33 @@ export async function setStatus(id: string, to: IncidentStatus, extra: Partial<P
   if (to === 'out' && !(extra.cause ?? cur.cause)) throw new Error('Cause is required to close an incident');
   if (to === 'dismissed' && !(extra.dismiss_reason ?? '').trim()) throw new Error('A reason is required for a false alarm');
   const now = nowIso();
-  await putLocal('incidents', { ...cur, ...extra, status: to, client_updated_at: now });
+  // Out starts the SOP clock (patrol, report); the server keeps the same rule
+  const out_at = to === 'out' ? (cur.status === 'out' ? cur.out_at ?? now : now) : null;
+  await putLocal('incidents', { ...cur, ...extra, status: to, out_at, client_updated_at: now });
   await logEvent(id, 'status', { from: cur.status, to, ...extra });
+}
+
+/** Set or change the SOP category (fires grow and shrink). Responders, coordinators, admins. */
+export async function setCategory(id: string, category: Category) {
+  const m = me();
+  if (!can(m.role, 'status')) throw new Error('Only responders and coordinators can change the category');
+  const cur = await getRow<Incident>('incidents', id);
+  if (!cur) throw new Error('Incident not found');
+  if (cur.category === category) return;
+  const now = nowIso();
+  await putLocal('incidents', { ...cur, category, size_class: sizeFromCategory(category), client_updated_at: now });
+  await logEvent(id, 'note', { text: `Category ${cur.category ?? '?'} → ${category} (${CATEGORY[category].name})` });
+}
+
+/** Incident Manager: record that the Incident Report went to the GM and VP of Forestry (or undo). */
+export async function setReportSubmitted(id: string, done: boolean) {
+  const m = me();
+  if (m.role !== 'coordinator' && m.role !== 'admin') throw new Error('Only a coordinator or admin can record the report');
+  const cur = await getRow<Incident>('incidents', id);
+  if (!cur) throw new Error('Incident not found');
+  const now = nowIso();
+  await putLocal('incidents', { ...cur, report_submitted_at: done ? now : null, client_updated_at: now });
+  await logEvent(id, 'note', { text: done ? 'Incident report submitted to GM & VP Forestry' : 'Report submission undone' });
 }
 
 /** Remove a fire report entirely (duplicate, test or wrong). Coordinators and admins; kept on the server, hidden everywhere. */

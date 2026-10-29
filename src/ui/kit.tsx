@@ -105,7 +105,7 @@ const STATUS_STYLE: Record<IncidentStatus, { c: string; dot: string; label: stri
   responding: { c: 'text-on-fire-bg bg-fire-bg', dot: 'bg-fire', label: 'Active · crews responding' },
   on_scene: { c: 'text-on-fire-bg bg-fire-bg', dot: 'bg-fire', label: 'Active · crews on scene' },
   contained: { c: 'text-on-moss bg-moss', dot: 'bg-ok', label: 'Contained' },
-  controlled: { c: 'text-on-moss bg-moss', dot: 'bg-ok', label: 'Controlled' },
+  controlled: { c: 'text-on-moss bg-moss', dot: 'bg-ok', label: 'Mop-up' },
   out: { c: 'text-on-moss bg-moss', dot: 'bg-ok', label: 'Out (cold)' },
   dismissed: { c: 'text-muted bg-sc', dot: 'bg-outline', label: 'False alarm' },
 };

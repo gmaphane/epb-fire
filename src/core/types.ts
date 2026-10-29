@@ -31,6 +31,12 @@ export interface Incident extends Local {
   status: IncidentStatus;
   source: 'tower' | 'camera' | 'satellite' | 'patrol' | 'community' | 'other';
   size_class: 'unknown' | 'small' | 'medium' | 'large';
+  /** SOP 4.1 fire category 1–5 (null = not assessed yet). */
+  category?: 1 | 2 | 3 | 4 | 5 | null;
+  /** When the fire was declared Out: starts the Fire Watch Patrol and the report deadlines. */
+  out_at?: string | null;
+  /** When the Incident Report was submitted to the GM and VP of Forestry. */
+  report_submitted_at?: string | null;
   notes: string;
   lat: number;
   lon: number;

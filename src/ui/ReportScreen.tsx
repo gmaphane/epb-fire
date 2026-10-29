@@ -12,9 +12,9 @@ import { fmtDd, fmtDistance, fmtDms, haversineM, toUtm30 } from '../core/geo';
 import { parseCoordinates, radioDigits, siteDistanceKm } from '../core/coords';
 import { locate } from '../core/actions';
 import type { Incident } from '../core/types';
+import { CATEGORIES, CATEGORY, sizeFromCategory, type Category } from '../core/flow';
 
 const SOURCES: [Incident['source'], string][] = [['patrol', 'Patrol'], ['tower', 'Lookout tower'], ['camera', 'Camera'], ['community', 'Community'], ['satellite', 'Satellite'], ['other', 'Other']];
-const SIZES: [Incident['size_class'], string][] = [['unknown', 'Not sure'], ['small', 'Small, under 1 ha'], ['medium', 'Medium'], ['large', 'Large or spreading']];
 
 const lastSource = (): Incident['source'] => { try { return (localStorage.getItem('epb.lastSource') as Incident['source']) || 'patrol'; } catch { return 'patrol'; } };
 
@@ -23,7 +23,7 @@ export function ReportScreen({ detection }: { detection: string | null }) {
   const g = useGps();
   const det = detection ? s.detections.find((d) => d.id === detection) : null;
   const [source, setSource] = useState<Incident['source']>(det ? 'satellite' : lastSource());
-  const [size, setSize] = useState<Incident['size_class']>('unknown');
+  const [cat, setCat] = useState<Category | null>(null);
   const [notes, setNotes] = useState('');
   const [photo, setPhoto] = useState<File | null>(null);
   const [pin, setPin] = useState<{ lat: number; lon: number } | null>(det ? { lat: det.lat, lon: det.lon } : null);
@@ -89,7 +89,7 @@ export function ReportScreen({ detection }: { detection: string | null }) {
     try {
       try { localStorage.setItem('epb.lastSource', source); } catch { /* ignore */ }
       const inc = await reportFire({
-        source, size_class: size, notes, lat: at.lat, lon: at.lon,
+        source, size_class: sizeFromCategory(cat), category: cat, notes, lat: at.lat, lon: at.lon,
         accuracy_m: mode === 'manual' ? (Number(accText) > 0 ? Number(accText) : null) : mode === 'map' ? (det ? 375 : null) : rec.fix?.acc ?? null,
         estimated: mode === 'map' && (!!det || !rec.fix || haversineM(at.lat, at.lon, rec.fix.lat, rec.fix.lon) > 15),
         photo, detection_id: det?.id ?? null,
@@ -166,8 +166,12 @@ export function ReportScreen({ detection }: { detection: string | null }) {
           <div class="flex flex-wrap gap-2">{SOURCES.map(([k, l]) => <Choice key={k} testid={'src-' + k} selected={source === k} onClick={() => setSource(k)}>{l}</Choice>)}</div>
         </div>
         <div>
-          <h2 class="font-display text-[20px] mb-3">How big?</h2>
-          <div class="flex flex-wrap gap-2">{SIZES.map(([k, l]) => <Choice key={k} testid={'size-' + k} selected={size === k} onClick={() => setSize(k)}>{l}</Choice>)}</div>
+          <h2 class="font-display text-[20px] mb-3">How big? <span class="text-[14px] font-sans text-muted">SOP category</span></h2>
+          <div class="flex flex-wrap gap-2">
+            <Choice testid="cat-none" selected={cat === null} onClick={() => setCat(null)}>Not sure</Choice>
+            {CATEGORIES.map((c) => <Choice key={c} testid={'cat-' + c} selected={cat === c} onClick={() => setCat(c)}>{c} · {CATEGORY[c].name}</Choice>)}
+          </div>
+          {cat && <p class="mt-2 text-[13px] text-muted" data-testid="cat-hint">{CATEGORY[cat].size} · {CATEGORY[cat].signs}</p>}
         </div>
         <div class="relative">
           <input data-testid="notes" class={cx(field, 'pr-14')} placeholder="Add a note (optional)" value={notes} onInput={(e) => setNotes((e.target as HTMLInputElement).value)} />

@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
       const to = await users({ all: true, except: i.reported_by }); // every crew member and coordinator, not just control
       const r = await sendPush(to, {
         title: `Fire reported · ${i.compartment ?? i.block ?? 'unmapped area'}`,
-        body: `${i.status === 'reported' ? 'Unverified' : i.status} · by ${i.reported_by_name} · ${dd(i.lat, i.lon)}`,
+        body: `${i.category ? `Cat ${i.category} · ` : ''}${i.status === 'reported' ? 'Unverified' : i.status} · by ${i.reported_by_name} · ${dd(i.lat, i.lon)}`,
         url: `/#/incident/${i.id}`, tag: `incident-${i.id}`, urgent: true, kind: 'incident',
       });
       console.log(JSON.stringify({ alert: 'incident', code: i.code, recipients: to.length, ...r }));

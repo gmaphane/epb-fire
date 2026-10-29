@@ -54,7 +54,7 @@ export function SyncScreen() {
   };
   const exportCsv = async () => {
     const inc = await getAll<Incident>('incidents');
-    const cols = ['code', 'label', 'status', 'source', 'size_class', 'reported_at', 'lat', 'lon', 'accuracy_m', 'block', 'compartment', 'cause', 'area_ha', 'reported_by_name'] as const;
+    const cols = ['code', 'label', 'status', 'source', 'category', 'size_class', 'reported_at', 'out_at', 'report_submitted_at', 'lat', 'lon', 'accuracy_m', 'block', 'compartment', 'cause', 'area_ha', 'reported_by_name'] as const;
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     download(`epb-fire-incidents-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv', [cols.join(','), ...inc.map((i) => cols.map((c) => esc((i as any)[c])).join(','))].join('\n'));
   };

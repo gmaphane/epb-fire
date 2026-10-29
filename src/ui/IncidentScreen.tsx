@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { Camera, Navigation, Route as RouteIcon, Send, UserPlus } from 'lucide-preact';
-import { addNote, addPhoto, assignmentAction, photoBlob, setStatus } from '../core/actions';
+import { addNote, addPhoto, assignmentAction, photoBlob, setCategory, setReportSubmitted, setStatus } from '../core/actions';
 import { getState, toast, useStore } from '../core/store';
 import { ago, hhmm } from '../core/time';
 import { fmtDms, fmtHa, fmtUtm } from '../core/geo';
-import { ACTIVE, allowedNext, CAUSES, can, isOpen, STATUS_LABEL } from '../core/flow';
+import { ACTIVE, afterOut, allowedNext, CATEGORIES, CATEGORY, CAUSES, can, isOpen, STATUS_LABEL, type Category } from '../core/flow';
 import { DeleteSheet } from './MapScreen';
 import { Banner, Button, Choice, CoordReadout, Metric, RowSyncDot, Screen, StatusChip, cx } from './kit';
 import { back, go, useNow } from './hooks';
@@ -37,6 +37,7 @@ export function IncidentScreen({ id }: { id: string }) {
   const role = s.me?.role;
   const [del, setDel] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [catOpen, setCatOpen] = useState(false);
   // wind at the fire and the compartments it could reach (same as the map card)
   const wx = useWeather(inc?.lat, inc?.lon);
   const th = useMemo(() => (inc ? threats(inc, s.compartments, wx ? { kmh: wx.windKmh, from: wx.windFrom } : null) : []), [inc?.lat, inc?.lon, s.compartments, wx?.fetched]);
@@ -77,9 +78,28 @@ export function IncidentScreen({ id }: { id: string }) {
 
       <div class="grid grid-cols-3 gap-3 px-1">
         <Metric label="Reported" value={ago(inc.reported_at, now)} />
-        <Metric label="Size" value={inc.size_class === 'unknown' ? 'Not sure' : inc.size_class} />
+        <button class="press text-left min-w-0" data-testid="cat-metric" disabled={!can(role, 'status')} onClick={() => setCatOpen((v) => !v)}>
+          <Metric label={inc.category ? CATEGORY[inc.category].name : 'Category'} value={inc.category ? `Cat ${inc.category}` : inc.size_class !== 'unknown' ? inc.size_class : 'Not set'} tone={inc.category ? 'text-ink' : 'text-muted'} />
+        </button>
         <Metric label="Burnt" value={fmtHa(inc.area_ha)} unit="ha" />
       </div>
+
+      {catOpen && (
+        <section class="fade-in rounded-card border border-line bg-card p-4" data-testid="cat-panel">
+          <div class="flex flex-wrap gap-2">
+            {CATEGORIES.map((c) => <Choice key={c} testid={'setcat-' + c} selected={inc.category === c} onClick={() => void setCategory(id, c as Category).then(() => { setCatOpen(false); toast(`Category ${c} · ${CATEGORY[c].name}`); }).catch((e) => toast((e as Error).message, 'err'))}>{c} · {CATEGORY[c].name}</Choice>)}
+          </div>
+          <p class="mt-2 text-[12px] text-faint">SOP 4.1 categories by size and fire behaviour. Change it as the fire grows or shrinks.</p>
+        </section>
+      )}
+
+      {inc.category && isOpen(inc.status) && (
+        <div class="px-1 text-[13px] text-muted num" data-testid="cat-sop">
+          SOP for Cat {inc.category}: {CATEGORY[inc.category].crew} crew · control {CATEGORY[inc.category].control} · patrol {CATEGORY[inc.category].patrol}
+        </div>
+      )}
+
+      {inc.status === 'out' && inc.out_at && <AfterOut out={inc.out_at} cat={inc.category ?? null} submitted={inc.report_submitted_at ?? null} canRecord={role === 'coordinator' || role === 'admin'} onRecord={(v) => void setReportSubmitted(id, v).then(() => toast(v ? 'Report recorded as submitted' : 'Undone')).catch((e) => toast((e as Error).message, 'err'))} now={now} />}
 
       <div class="space-y-2">
         <Button kind="primary" size="lg" full icon={<Navigation size={18} />} onClick={() => go('navigate/incident/' + id)}>Navigate</Button>
@@ -103,6 +123,7 @@ export function IncidentScreen({ id }: { id: string }) {
       {next.length > 0 && (
         <section>
           <H>Update status</H>
+          <p class="-mt-2 mb-3 text-[13px] text-muted">Contained: perimeter secure · Mop-up: put out hot spots, cold-trail the edge · Out: no smoke left.</p>
           <div class="flex flex-wrap gap-2">
             {next.map((st) => (
               <Choice key={st} testid={'status-' + st} selected={pick === st} onClick={() => (st === 'out' || st === 'dismissed' ? setPick(st) : void apply(st))}>{STATUS_LABEL[st]}</Choice>
@@ -202,4 +223,42 @@ function label(e: { kind: string; payload: Record<string, any> }): string {
     case 'perimeter': return `Perimeter closed: ${p.area_ha != null ? Number(p.area_ha).toFixed(2) : '—'} ha, ${p.vertices} points`;
     default: return e.kind;
   }
+}
+
+/** SOP 4.1 after a fire is declared Out: Fire Watch Patrol, 48 h monitoring, and the Incident Report deadlines. */
+function AfterOut({ out, cat, submitted, canRecord, onRecord, now }: { out: string; cat: Category | null; submitted: string | null; canRecord: boolean; onRecord: (v: boolean) => void; now: number }) {
+  const a = afterOut(out, cat);
+  const when = (t: number) => new Date(t).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  const row = (label: string, t: number | null, done = false, testid?: string) => (
+    <div class="flex items-center justify-between gap-3 py-2" data-testid={testid}>
+      <span class="text-[14px]">{label}</span>
+      <span class={cx('text-[13px] num text-right shrink-0', done ? 'text-ok font-semibold' : t != null && t < now ? 'text-fire-dark font-semibold' : 'text-muted')}>
+        {done ? 'Done' : t == null ? 'Set the category' : t < now ? `Overdue · ${when(t)}` : `by ${when(t)}`}
+      </span>
+    </div>
+  );
+  const patrolOn = a.patrolUntil != null && a.patrolUntil > now;
+  return (
+    <section class="rounded-card border border-line bg-card p-4" data-testid="after-out">
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="font-display text-[20px]">After Out</h2>
+        <span class="text-[13px] text-muted num">Out {when(Date.parse(out))}</span>
+      </div>
+      {patrolOn && <div class="mt-2 rounded-2xl bg-amber-bg text-amber px-3 py-2 text-[14px] font-semibold" data-testid="patrol-on">Fire Watch Patrol on until {when(a.patrolUntil!)}</div>}
+      <div class="mt-1 divide-y divide-line">
+        {row(`Fire Watch Patrol${cat ? ` (Cat ${cat}: ${CATEGORY[cat].patrol})` : ''}`, a.patrolUntil, a.patrolUntil != null && a.patrolUntil <= now, 'patrol-row')}
+        {row('Monitor burn area (48 h)', a.monitorUntil, a.monitorUntil <= now)}
+        {row('Draft incident report (12 h)', a.draftDue, !!submitted)}
+        {row('Finalise report (24 h)', a.finalDue, !!submitted)}
+        {row('Submit to GM & VP Forestry (48 h)', a.submitDue, !!submitted, 'submit-row')}
+      </div>
+      {canRecord && (
+        <div class="mt-3">
+          {submitted
+            ? <button class="text-[13px] text-muted underline" data-testid="report-undo" onClick={() => onRecord(false)}>Report submitted {when(Date.parse(submitted))} · undo</button>
+            : <Button kind="secondary" full testid="report-done" onClick={() => onRecord(true)}>Report submitted</Button>}
+        </div>
+      )}
+    </section>
+  );
 }
