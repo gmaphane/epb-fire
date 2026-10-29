@@ -3,6 +3,7 @@ import { BellRing, Flame, Satellite, List, Map as MapIcon, Settings, Users, Sear
 import { assignmentAction } from '../core/actions';
 import { chime, startAlarm, stopAlarm } from '../core/alarm';
 import { isOpen } from '../core/flow';
+import { stopResponding } from '../core/presence';
 import { getState, setState, useStore } from '../core/store';
 import { go, useGps, useRoute } from './hooks';
 import { cx, GpsChip, StatusChip, SyncChip } from './kit';
@@ -17,6 +18,8 @@ import { SyncScreen } from './SyncScreen';
 import { CrewsScreen } from './CrewsScreen';
 import { AdminScreen } from './AdminScreen';
 import { SignIn } from './SignIn';
+import { Tour, tourSeen } from './Tour';
+import { autoPack } from '../core/tiles';
 import { ago } from '../core/time';
 import { CONFIG, IS_DEMO } from '../config';
 import { fmtDd, fmtDms, toUtm30 } from '../core/geo';
@@ -59,6 +62,17 @@ function AlarmBanner() {
       </div>
     </div>
   );
+}
+
+/** Clears "En route / On scene" once the fire it was for is closed, dismissed or deleted, so it never sticks. */
+function PresenceGuard() {
+  const { presence, incidents, booted } = useStore((s) => ({ presence: s.presence, incidents: s.incidents, booted: s.booted }));
+  useEffect(() => {
+    if (!booted || !presence || (presence.status !== 'en_route' && presence.status !== 'on_scene')) return;
+    const i = presence.incident_id ? incidents.find((x) => x.id === presence.incident_id) : null;
+    if (!i || i.deleted_at || !isOpen(i.status)) void stopResponding();
+  }, [presence?.status, presence?.incident_id, incidents, booted]);
+  return null;
 }
 
 /** Tells everyone, inside the app, when a fire is reported or a satellite hotspot is seen near the estate.
@@ -196,6 +210,18 @@ export function App() {
   }, [theme]);
   useEffect(() => { if (getState().overlay) setState({ overlay: null }); }, [route.name, route.parts.join('/')]);
 
+  const [tour, setTour] = useState(false);
+  useEffect(() => { if (me && !tourSeen(me.id)) setTour(true); }, [me?.id]);
+  useEffect(() => { const f = () => setTour(true); window.addEventListener('ew-tour', f); return () => window.removeEventListener('ew-tour', f); }, []);
+  // offline map downloads itself in the background a few seconds after sign-in, and again when back online
+  const basemap = useStore((s) => s.basemap);
+  useEffect(() => {
+    if (!me || IS_DEMO) return;
+    const go = () => void autoPack(basemap);
+    const t = setTimeout(go, 6000);
+    window.addEventListener('online', go);
+    return () => { clearTimeout(t); window.removeEventListener('online', go); };
+  }, [me?.id, basemap]);
   if (!booted) return <div class="h-full flex items-center justify-center text-muted font-semibold">Loading…</div>;
   if (!me) return <SignIn />;
 
@@ -224,6 +250,7 @@ export function App() {
     <div class="h-full flex flex-col relative bg-surface" data-night={night}>
       <AlarmBanner />
       <NewFireAlert />
+      <PresenceGuard />
       <div class="flex-1 min-h-0 relative">{screen}</div>
       {showFab && (onMap ? (
         // On the map: the red button at the foot of the tool rail, clear of any sheet
@@ -258,6 +285,7 @@ export function App() {
           </div>
         </nav>
       )}
+      {tour && <Tour onDone={() => setTour(false)} />}
       {overlay === 'search' && <SearchOverlay />}
       {overlay === 'info' && <InfoOverlay />}
       {toast && (

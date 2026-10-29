@@ -48,6 +48,10 @@ class Gps {
       { enableHighAccuracy: true, maximumAge: 0, timeout: 30_000 },
     );
     this.tickId = setInterval(() => this.set({ now: Date.now() }), 1000);
+    // some phones stall the first watch: nudge with a one-off read if nothing arrives, and on return to the app
+    const nudge = () => { try { navigator.geolocation.getCurrentPosition((p) => this.onFix(p), () => {}, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20_000 }); } catch { /* ignore */ } };
+    setTimeout(() => { if (!this.state.fix && this.id !== null) nudge(); }, 4000);
+    try { document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && this.id !== null) nudge(); }); } catch { /* no document */ }
   }
 
   stop() {

@@ -1,3 +1,4 @@
+import { resetTour } from './Tour';
 import { useEffect, useState } from 'preact/hooks';
 import { Download, FileSpreadsheet, HardDrive, RefreshCw, Sun, Moon, Smartphone, Users } from 'lucide-preact';
 import { downloadBlob, incidentsWorkbook } from '../core/exportIncidents';
@@ -6,7 +7,7 @@ import { CONFIG, IS_DEMO } from '../config';
 import { getAll, outboxAll, storageEstimate, onDbChange, type OutboxItem, metaSet } from '../core/db';
 import { setReadiness, saveTheme } from '../core/actions';
 import { can } from '../core/flow';
-import { downloadPack, packStatus, planPack, clearTiles } from '../core/tiles';
+import { downloadPack, packStatus, planPack, clearTiles, autoPackState, type AutoPack } from '../core/tiles';
 import { getState, setState, toast, useStore } from '../core/store';
 import { ago } from '../core/time';
 import { Banner, Button, Card, GpsChip, Screen, SyncChip, cx } from './kit';
@@ -36,6 +37,12 @@ export function SyncScreen() {
 
   const refresh = async () => { setItems(await outboxAll()); setEst(await storageEstimate()); setPersisted((await navigator.storage?.persisted?.()) ?? null); try { setPack(await packStatus(s.basemap)); } catch { /* no cache API */ } };
   useEffect(() => { void refresh(); const u = onDbChange((t) => { if (t === 'outbox') void refresh(); }); return u; }, [s.basemap]);
+  // background download (started automatically after sign-in) shows its progress here too
+  const [auto, setAuto] = useState<AutoPack | null>(autoPackState?.running ? autoPackState : null);
+  useEffect(() => {
+    const f = (e: Event) => { const d = (e as CustomEvent<AutoPack>).detail; setAuto(d.running ? d : null); if (!d.running) void refresh(); };
+    window.addEventListener('ew-pack', f); return () => window.removeEventListener('ew-pack', f);
+  }, [s.basemap]);
 
   const exportGeo = async () => {
     const inc = await getAll<Incident>('incidents'); const per = await getAll<Perimeter>('perimeters');
@@ -112,7 +119,7 @@ export function SyncScreen() {
         <h2 class="font-display text-[20px] mb-3">Ready for offline use?</h2>
         <ul class="space-y-2.5 text-[14px]">
           <Check ok={s.compartments.length > 0} label={`Site data (${s.compartments.length} compartments)`} bad="go online once and tap Sync now" />
-          <Check ok={!!pack && pack.have >= pack.total * 0.9} label="Offline map" bad="download it below on Wi-Fi" />
+          <Check ok={!!pack && pack.have >= pack.total * 0.9} label="Offline map" bad="downloads automatically when online" />
           <Check ok={persisted === true} label="Storage protected" bad="install the app to the home screen" />
           <Check ok={g.status === 'ok'} label="GPS working" bad={g.status === 'denied' ? 'Location blocked' : 'Waiting for GPS'} />
         </ul>
@@ -123,9 +130,10 @@ export function SyncScreen() {
         <h2 class="font-display text-[20px] mb-3">Offline map pack</h2>
         <div class="flex p-1 bg-sc rounded-pill mb-3">{(['satellite', 'street'] as const).map((b) => <button key={b} onClick={() => { setState({ basemap: b }); void metaSet('basemap', b); }} class={cx('press flex-1 h-9 rounded-pill text-[14px] font-medium', s.basemap === b ? 'bg-card text-ink shadow-l1' : 'text-muted')}>{b === 'satellite' ? 'Satellite' : 'Street'}</button>)}</div>
         <div class="text-[14px] text-muted num">About {plan.estMb} MB · {plan.tiles} tiles</div>
+        {!prog && auto && <div class="mt-2" data-testid="auto-pack"><div class="h-2 rounded-full bg-surface-mid overflow-hidden"><div class="h-full bg-brand" style={{ width: `${(auto.done / Math.max(1, auto.total)) * 100}%` }} /></div><div class="text-xs text-muted mt-1 num">Downloading automatically · {auto.done}/{auto.total}</div></div>}
         {prog && <div class="mt-2"><div class="h-2 rounded-full bg-surface-mid overflow-hidden"><div class="h-full bg-brand" style={{ width: `${(prog.done / Math.max(1, prog.total)) * 100}%` }} /></div><div class="text-xs text-muted mt-1 num">{prog.done}/{prog.total}{prog.failed ? ` · ${prog.failed} failed` : ''}</div></div>}
-        <div class="grid grid-cols-2 gap-2 mt-3"><Button testid="download-pack" icon={<Download size={18} />} disabled={!!prog || !plan.allowed} onClick={() => void doPack()}>Download map</Button><Button onClick={async () => { await clearTiles(); void refresh(); toast('Saved map tiles removed'); }}>Remove</Button></div>
-        <p class="text-[12px] text-faint mt-3">Development tile source; use licensed tiles before the pilot.</p>
+        <div class="grid grid-cols-2 gap-2 mt-3"><Button testid="download-pack" icon={<Download size={18} />} disabled={!!prog || !!auto || !plan.allowed} onClick={() => void doPack()}>Download map</Button><Button onClick={async () => { await clearTiles(); void refresh(); toast('Saved map tiles removed'); }}>Remove</Button></div>
+        <p class="text-[12px] text-faint mt-3">Saves itself in the background when the phone is online (skipped on data saver). Development tile source; use licensed tiles before the pilot.</p>
       </Card>
 
       {can(role, 'readiness') && (
@@ -155,6 +163,7 @@ export function SyncScreen() {
         <label class="flex items-center justify-between gap-3 min-h-[48px] text-[15px]">Simulate no network<input data-testid="sim-offline" type="checkbox" class="w-6 h-6 accent-[#2F8F5B]" checked={!!sy?.simulateOffline} onChange={(e) => engine.setSimulateOffline((e.target as HTMLInputElement).checked)} /></label>
         <div class="text-[13px] text-muted mt-1">{s.me?.name} · {s.me?.role} · v{CONFIG.version}{IS_DEMO ? ' · DEMO server' : ''}</div>
         <div class="grid grid-cols-2 gap-2 mt-3">
+          <Button onClick={() => { if (s.me) resetTour(s.me.id); window.dispatchEvent(new Event('ew-tour')); }} testid="show-tour">Welcome tour</Button>
           <Button onClick={() => void signOut()} testid="signout" disabled={pending.length > 0}>{pending.length > 0 ? 'Send records first' : 'Sign out'}</Button>
           {IS_DEMO && <Button kind="danger" onClick={async () => { if (!confirm('Delete ALL data on this phone (demo)?')) return; indexedDB.deleteDatabase('epb-fire'); await clearTiles(); location.reload(); }}>Reset demo</Button>}
         </div>

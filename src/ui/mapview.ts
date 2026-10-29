@@ -142,6 +142,7 @@ export interface RenderOpts {
   onIncident?: (id: string) => void;
   onDetection?: (id: string) => void;
   onAsset?: (id: string) => void;
+  onHazard?: (id: string) => void;
   onMapClick?: (lat: number, lon: number) => void;
 }
 
@@ -294,7 +295,10 @@ export class MapController {
     const z = this.map.getZoom();
     for (const p of s.crewPositions ?? []) {
       if (p.status === 'off' || p.id === s.me?.id) continue;
-      const st = CREW_STYLE[p.status] ?? CREW_STYLE.standby;
+      const inc = p.incident_id ? s.incidents.find((i) => i.id === p.incident_id) : null;
+      // a phone that still says "en route" for a fire that is closed or gone is shown as standby
+      const responding = (p.status === 'en_route' || p.status === 'on_scene') && !!inc && !inc.deleted_at && inc.status !== 'out' && inc.status !== 'dismissed';
+      const st = (responding ? CREW_STYLE[p.status] : p.status === 'standby' || p.status === 'en_route' || p.status === 'on_scene' ? CREW_STYLE.standby : CREW_STYLE[p.status]) ?? CREW_STYLE.standby;
       const age = now - Date.parse(p.fix_at);
       const stale = age > 5 * 60_000;
       const crew = s.crews.find((c) => c.id === p.crew_id);
@@ -304,8 +308,7 @@ export class MapController {
         zIndexOffset: 700,
         icon: L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15], html: `<div class="crew${stale ? ' stale' : ''}"><div class="crew-in" style="background:${st.c}">${SVG(st.p, 13)}</div>${tag}</div>` }),
       });
-      const inc = p.incident_id ? s.incidents.find((i) => i.id === p.incident_id) : null;
-      m.bindPopup(`<b>${esc(p.name)}</b>${crew ? `<div style="font-size:12px;color:#475569">${esc(crew.name)}</div>` : ''}<div style="margin-top:4px;font-size:12px"><b style="color:${st.c}">${st.label}</b>${inc ? ` → ${esc(inc.code ?? inc.label)}` : ''} · ${age < 60_000 ? 'just now' : Math.round(age / 60_000) + ' min ago'}${p.acc != null ? ` · ±${Math.round(p.acc)} m` : ''}</div>`);
+      m.bindPopup(`<b>${esc(p.name)}</b>${crew ? `<div style="font-size:12px;color:#475569">${esc(crew.name)}</div>` : ''}<div style="margin-top:4px;font-size:12px"><b style="color:${st.c}">${st.label}</b>${inc && responding ? ` → ${esc(inc.code ?? inc.label)}` : ''} · ${age < 60_000 ? 'just now' : Math.round(age / 60_000) + ' min ago'}${p.acc != null ? ` · ±${Math.round(p.acc)} m` : ''}</div>`);
       m.addTo(g);
     }
   }
@@ -348,7 +351,7 @@ export class MapController {
     if (ch('crewPositions', 'crews', 'layers', 'me', 'incidents')) this.renderCrews(s);
     if (ch('assets', 'layers', 'incidents')) this.renderAssets(s, o);
     if (ch('detections', 'layers') || po?.onDetection !== o.onDetection) this.renderDetections(s, o);
-    if (ch('hazards', 'layers')) this.renderHazards(s);
+    if (ch('hazards', 'layers') || po?.onHazard !== o.onHazard) this.renderHazards(s, o);
     if (ch('perimeters', 'incidents')) this.renderPerimeters(s);
     if (ch('incidents') || po?.selectedId !== o.selectedId || po?.onIncident !== o.onIncident) this.renderIncidents(s, o);
   }
@@ -425,11 +428,15 @@ export class MapController {
     }
   }
 
-  private renderHazards(s: MapData) {
+  private renderHazards(s: MapData, o: RenderOpts = {}) {
     this.g.hazards.clearLayers();
     if (!s.layers.hazards) return;
-    for (const h of s.hazards)
-      if (!h.resolved_at) L.marker([h.lat, h.lon], { icon: pin('#C7372D', ICON.alert, 26) }).bindTooltip(esc(`Hazard: ${h.kind.replace('_', ' ')}${h.note ? ' — ' + h.note : ''}`)).addTo(this.g.hazards);
+    for (const h of s.hazards) {
+      if (h.resolved_at) continue;
+      const m = L.marker([h.lat, h.lon], { icon: pin('#C7372D', ICON.alert, 26), title: 'Road hazard' }).bindTooltip(esc(`Hazard: ${h.kind.replace('_', ' ')}${h.note ? ' — ' + h.note : ''}`));
+      if (o.onHazard) m.on('click', () => o.onHazard?.(h.id));
+      m.addTo(this.g.hazards);
+    }
   }
 
   private renderPerimeters(s: MapData) {

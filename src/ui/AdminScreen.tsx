@@ -116,7 +116,7 @@ function UserSheet({ user, crews, meId, onClose, onDone, onChanged }: { user: Us
             </div>
             <div class="grid grid-cols-2 gap-2">
               <Button icon={<Copy size={17} />} onClick={() => { void navigator.clipboard?.writeText(`${secret.email}\n${secret.password}`); toast('Copied'); }}>Copy</Button>
-              <Button icon={<Share2 size={17} />} onClick={() => { const t = `EPB Fire app\nSign in at ${location.origin}\nEmail: ${secret.email}\nTemporary password: ${secret.password}`; if (navigator.share) void navigator.share({ text: t }).catch(() => {}); else { void navigator.clipboard?.writeText(t); toast('Copied'); } }}>Share</Button>
+              <Button icon={<Share2 size={17} />} onClick={() => { const t = `EmberWatch (fire app)\nSign in at ${location.origin}\nEmail: ${secret.email}\nTemporary password: ${secret.password}`; if (navigator.share) void navigator.share({ text: t }).catch(() => {}); else { void navigator.clipboard?.writeText(t); toast('Copied'); } }}>Share</Button>
             </div>
             <Button kind="primary" full testid="temp-password-done" onClick={onDone}>Done</Button>
           </div>

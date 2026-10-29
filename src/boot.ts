@@ -18,6 +18,8 @@ function begin() {
   gps.start(); // warm the GNSS fix as early as possible
   engine.start();
   void startPresence();
+  // a push reached this phone while the app is open: fetch the new record now rather than waiting for the next poll
+  try { navigator.serviceWorker?.addEventListener('message', (e) => { if (e.data?.type === 'ew-push') void engine.kick(true); }); } catch { /* no SW */ }
 }
 
 export async function startApp() {

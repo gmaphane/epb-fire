@@ -9,6 +9,7 @@ import {
   markPushed,
   metaGet,
   metaSet,
+  onDbChange,
   outboxAll,
   outboxCounts,
   pruneMissing,
@@ -82,8 +83,17 @@ export class SyncEngine {
     void this.refreshCounts();
     void this.kick(true);
     this.unsub = this.remote.subscribe((t, row) => void applyRemote(t, row));
+    // send new records straight away (a fire report must not wait for the next 10 s tick)
+    let soon: ReturnType<typeof setTimeout> | null = null;
+    this.unsubOutbox = onDbChange((t) => {
+      if (t !== 'outbox' || this.state.simulateOffline) return;
+      if (soon) clearTimeout(soon);
+      soon = setTimeout(() => { soon = null; void outboxCounts().then((c) => { if (c.pending > 0 && !this.state.running) void this.kick(false); }); }, 250);
+    });
   }
+  private unsubOutbox: (() => void) | null = null;
   stop() {
+    this.unsubOutbox?.(); this.unsubOutbox = null;
     this.timers.forEach(clearInterval);
     this.timers = [];
     this.unsub?.();

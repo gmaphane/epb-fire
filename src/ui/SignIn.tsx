@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import { Flame } from 'lucide-preact';
 import { signIn } from '../boot';
-import { IS_DEMO } from '../config';
+import { CONFIG, IS_DEMO } from '../config';
 import { Banner, Button } from './kit';
 import { DEMO_USERS } from '../data/demoSeed';
 
@@ -19,8 +19,9 @@ export function SignIn() {
     <div class="h-full overflow-y-auto bg-surface px-6 pt-safe">
       <div class="max-w-md mx-auto min-h-full flex flex-col pt-16 pb-10 screen-in">
         <div class="w-14 h-14 rounded-[18px] bg-brand flex items-center justify-center shadow-l2"><Flame size={28} class="text-[#F0675C]" fill="#F0675C" /></div>
-        <h1 class="font-display text-[34px] leading-[1.1] mt-8">Fire response,<br />Bandai Hills</h1>
-        <p class="text-[15px] text-muted mt-2">Works with no signal after the first sign-in.</p>
+        <h1 class="font-display text-[38px] leading-[1.05] mt-8">{CONFIG.appName}</h1>
+        <p class="text-[17px] mt-1">Fire response · Bandai Hills</p>
+        <p class="text-[15px] text-muted mt-3">Works with no signal after the first sign-in.</p>
         <div class="mt-10 space-y-3">
           {err && <Banner tone="err">{err}</Banner>}
           {IS_DEMO ? (

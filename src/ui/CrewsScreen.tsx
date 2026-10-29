@@ -26,7 +26,10 @@ export function CrewsScreen() {
   const sharing = s.presence && s.presence.status !== 'off';
   const crewName = (id: string | null) => s.crews.find((c) => c.id === id)?.name ?? null;
   const incCode = (id: string | null) => { const i = s.incidents.find((x) => x.id === id); return i ? i.code ?? i.label : null; };
-  const people = s.crewPositions.filter((p) => p.status !== 'off');
+  const openFire = (id: string | null) => { const i = id ? s.incidents.find((x) => x.id === id) : null; return !!i && !i.deleted_at && i.status !== 'out' && i.status !== 'dismissed'; };
+  // "en route / on scene" for a fire that is closed or gone counts as standby, so it never sticks on screen
+  const people = s.crewPositions.filter((p) => p.status !== 'off')
+    .map((p) => ((p.status === 'en_route' || p.status === 'on_scene') && !openFire(p.incident_id) ? { ...p, status: 'standby' as const, incident_id: null } : p));
   const total = people.filter((p) => !isStale(p)).length;
 
   return (

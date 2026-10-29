@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'prompt', // never reload the page mid-incident; the app shows an "update ready" toast
       includeAssets: ['icon.svg', 'push-sw.js'],
       manifest: {
-        name: 'EPB Fire Response',
-        short_name: 'EPB Fire',
+        name: 'EmberWatch · Fire response',
+        short_name: 'EmberWatch',
         description: 'Fire prediction, detection, response and recording for EcoPlanet Bamboo',
         theme_color: '#133C34',
         background_color: '#F5F6F0',

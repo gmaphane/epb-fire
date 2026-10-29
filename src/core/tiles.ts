@@ -115,3 +115,31 @@ export async function downloadPack(
 export async function clearTiles() {
   await caches.delete(CACHE);
 }
+
+/**
+ * Automatic offline map: once per session per basemap, when online and not on data-saver,
+ * fill in whatever tiles of the estate pack are missing. Progress is broadcast as 'ew-pack' events.
+ */
+export interface AutoPack { kind: 'street' | 'satellite'; done: number; total: number; failed: number; running: boolean }
+let autoRun: Promise<void> | null = null;
+const autoDone = new Set<string>();
+export let autoPackState: AutoPack | null = null;
+const emit = (s: AutoPack) => { autoPackState = s; try { window.dispatchEvent(new CustomEvent('ew-pack', { detail: s })); } catch { /* ignore */ } };
+
+export function autoPack(kind: 'street' | 'satellite'): Promise<void> {
+  if (autoRun || autoDone.has(kind) || typeof caches === 'undefined' || !navigator.onLine) return autoRun ?? Promise.resolve();
+  const conn = (navigator as any).connection;
+  if (conn?.saveData || /(^|-)2g$/.test(conn?.effectiveType ?? '')) return Promise.resolve();
+  if (!planPack().allowed) return Promise.resolve();
+  autoRun = (async () => {
+    try {
+      void navigator.storage?.persist?.(); // ask the browser not to evict saved tiles
+      const st = await packStatus(kind);
+      if (st.total && st.have >= st.total * 0.98) { autoDone.add(kind); return; }
+      const r = await downloadPack(kind, (done, total, failed) => emit({ kind, done, total, failed, running: true }));
+      emit({ kind, done: r.done, total: r.total, failed: r.failed, running: false });
+      if (r.failed < r.total * 0.02) autoDone.add(kind); // mostly complete; retry next session otherwise
+    } catch { /* offline mid-way: try again next start */ } finally { autoRun = null; }
+  })();
+  return autoRun;
+}

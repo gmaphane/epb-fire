@@ -37,7 +37,8 @@ export const CONFIG = {
   ackEscalationMs: 3 * 60_000,
   walkSpeedKmh: 4,
   driveSpeedKmh: 25,
-  version: '0.1.0-mvp',
+  appName: 'EmberWatch',
+  version: '0.2.0',
 };
 
 export const IS_DEMO = !CONFIG.supabaseUrl || !CONFIG.supabaseAnonKey;

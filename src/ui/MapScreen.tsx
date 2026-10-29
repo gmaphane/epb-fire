@@ -7,7 +7,7 @@ import { CONFIG } from '../config';
 import { MapController, RISK, type RouteLine } from './mapview';
 import { Button, Choice, CoordReadout, NorthDial, RailButton, SatChip, Sheet, StatusChip, SyncChip, cx } from './kit';
 import { cardinal, fmtDistance, haversineM, toUtm30 } from '../core/geo';
-import { deleteIncident, moveIncident } from '../core/actions';
+import { deleteIncident, moveIncident, resolveHazard } from '../core/actions';
 import { ago } from '../core/time';
 import { go, useGpsFix } from './hooks';
 import { isOpen } from '../core/flow';
@@ -55,6 +55,7 @@ export function MapScreen() {
   const g = useGpsFix();
   const [sel, setSel] = useState<string | null>(null);
   const [selDet, setSelDet] = useState<string | null>(null);
+  const [selHaz, setSelHaz] = useState<string | null>(null);
   const [sheet, setSheet] = useState<'closed' | 'list'>('closed');
   const [panel, setPanel] = useState(false);
   const [presenceMenu, setPresenceMenu] = useState(false);
@@ -65,7 +66,7 @@ export function MapScreen() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const followed = useRef(false);
 
-  const closeAll = () => { setSel(null); setSelDet(null); setSheet('closed'); setPresenceMenu(false); };
+  const closeAll = () => { setSel(null); setSelDet(null); setSelHaz(null); setSheet('closed'); setPresenceMenu(false); };
 
   useEffect(() => {
     const c = new MapController(el.current!);
@@ -77,7 +78,8 @@ export function MapScreen() {
   // stable handlers so the map doesn't redraw fire markers just because this screen re-rendered
   const handlers = useMemo(() => ({
     onIncident: (id: string) => { setSel(id); setSelDet(null); setPanel(false); setPresenceMenu(false); },
-    onDetection: (id: string) => { setSelDet(id); setSel(null); setPanel(false); setPresenceMenu(false); },
+    onDetection: (id: string) => { setSelDet(id); setSel(null); setSelHaz(null); setPanel(false); setPresenceMenu(false); },
+    onHazard: (id: string) => { setSelHaz(id); setSel(null); setSelDet(null); setPanel(false); setPresenceMenu(false); },
   }), []);
   useEffect(() => {
     // the controller only rebuilds the layer groups whose data changed
@@ -120,6 +122,7 @@ export function MapScreen() {
   const active = s.incidents.filter((i) => isOpen(i.status) && !i.deleted_at);
   const inc = s.incidents.find((i) => i.id === sel);
   const det = s.detections.find((d) => d.id === selDet);
+  const haz = s.hazards.find((h) => h.id === selHaz && !h.resolved_at);
 
   // routes: me → every open fire (rounded fix so GPS jitter doesn't recompute)
   const fixKey = here ? `${here.lat.toFixed(4)},${here.lon.toFixed(4)}` : '';
@@ -147,9 +150,12 @@ export function MapScreen() {
   }, [liveKey, activeKey, s.roads, s.mapLayers]);
 
   useEffect(() => {
-    const r = target ? routes.get(target.id) : undefined;
+    // my own route is drawn only for the fire I opened or the one I'm responding to, never just "the nearest fire"
+    const respondingTo = s.presence && (s.presence.status === 'en_route' || s.presence.status === 'on_scene') ? s.presence.incident_id : null;
+    const showFor = inc && isOpen(inc.status) && !inc.deleted_at ? inc.id : respondingTo && active.some((i) => i.id === respondingTo) ? respondingTo : null;
+    const r = showFor ? routes.get(showFor) : undefined;
     ctl.current?.setRoutes([...(s.layers.crews ? crewRoutes : []), ...(r ? [{ coords: r.coords, primary: true }] : [])]);
-  }, [routes, target?.id, crewRoutes, s.layers.crews]);
+  }, [routes, inc?.id, inc?.status, s.presence?.status, s.presence?.incident_id, activeKey, crewRoutes, s.layers.crews]);
 
   // weather at the focused fire (else where I am, else the estate) and the spread threat it implies
   const wxAt = target ?? here ?? CONFIG.center;
@@ -182,7 +188,7 @@ export function MapScreen() {
           <div class="flex-1 min-w-0 h-[52px] bg-card rounded-pill shadow-capsule flex items-center pl-1.5 pr-2 gap-2">
             <button aria-label="Status and info" data-testid="appbar-info" onClick={() => setState({ overlay: 'info' })} class="press w-10 h-10 rounded-full bg-brand flex items-center justify-center shrink-0"><Flame size={18} class="text-[#F0675C]" fill="#F0675C" /></button>
             <button aria-label="Search" data-testid="appbar-search" onClick={() => setState({ overlay: 'search' })} class="flex-1 min-w-0 flex flex-col items-start text-left leading-tight">
-              <span class="text-[15px] font-semibold truncate max-w-full">Bandai Hills</span>
+              <span class="text-[15px] font-semibold truncate max-w-full">{CONFIG.appName}</span>
               <span class="text-[12px] text-muted num truncate max-w-full" data-testid="capsule-coords">
                 {here ? <>{Math.abs(here.lat).toFixed(4)}° {here.lat >= 0 ? 'N' : 'S'}, {Math.abs(here.lon).toFixed(4)}° {here.lon >= 0 ? 'E' : 'W'} · ±{Math.round(here.acc)} m</> : g.status === 'denied' ? 'GPS blocked' : 'Finding GPS…'}
               </span>
@@ -251,8 +257,21 @@ export function MapScreen() {
         <div class="absolute inset-x-0 bottom-0 z-[1150]" data-testid="map-sheet">
           {inc ? (
             <IncidentCard inc={inc} r={routes.get(inc.id)} role={s.me?.role} onClose={() => setSel(null)} sharingFor={sharing && pr!.incident_id === inc.id ? pr!.status : null} wx={target?.id === inc.id ? wx : null} threats={target?.id === inc.id ? threatList : []} onMove={() => { setMoving(inc.id); setMoveTo(null); setSel(null); }} onDelete={() => setDeleting(inc.id)} />
+          ) : haz ? (
+            <Sheet testid="hazard-sheet" class="px-5 pb-5 space-y-4" onDown={() => setSelHaz(null)}>
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <h2 class="font-display text-[22px] leading-tight">{HAZARD_LABEL[haz.kind] ?? 'Hazard'}</h2>
+                  <p class="text-[14px] text-muted mt-1">{haz.note ? `${haz.note} · ` : ''}{ago(haz.created_at)}{here ? ` · ${fmtDistance(haversineM(here.lat, here.lon, haz.lat, haz.lon))} away` : ''}</p>
+                </div>
+                <button aria-label="Close" class="press w-9 h-9 -mr-1 rounded-full flex items-center justify-center text-muted shrink-0" onClick={() => setSelHaz(null)}><X size={20} /></button>
+              </div>
+              {(haz.by === s.me?.id || s.me?.role === 'coordinator' || s.me?.role === 'admin')
+                ? <Button kind="secondary" size="lg" full testid="hazard-remove" icon={<Trash2 size={18} />} onClick={() => void resolveHazard(haz).then(() => { toast('Hazard removed'); setSelHaz(null); }).catch((e) => toast((e as Error).message, 'err'))}>Remove hazard</Button>
+                : <p class="text-[13px] text-muted">Only the person who added it or a coordinator can remove it.</p>}
+            </Sheet>
           ) : det ? (
-            <Sheet class="px-5 pb-5 space-y-4">
+            <Sheet class="px-5 pb-5 space-y-4" onDown={() => setSelDet(null)}>
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
                   <h2 class="font-display text-[22px] leading-tight">Satellite hotspot</h2>
@@ -264,7 +283,7 @@ export function MapScreen() {
               <Button kind="danger" size="lg" full icon={<Satellite size={18} />} onClick={() => go('report?det=' + det.id)}>Report as fire</Button>
             </Sheet>
           ) : sheet === 'list' && active.length ? (
-            <Sheet testid="incident-list" class="pb-4">
+            <Sheet testid="incident-list" class="pb-4" onDown={() => setSheet('closed')} onHandle={() => setSheet('closed')}>
               <button class="w-full flex items-center justify-between px-5 pt-1 pb-3" onClick={() => setSheet('closed')}>
                 <span class="font-display text-[22px]" data-testid="active-count">{active.length} active fire{active.length > 1 ? 's' : ''}</span>
                 <ChevronDown size={22} class="text-muted" />
@@ -288,7 +307,10 @@ export function MapScreen() {
               <div class="px-5 pt-2"><Button kind="tonal" full onClick={() => go('incidents')}>See all fires</Button></div>
             </Sheet>
           ) : (
-            <Sheet class="px-4 pb-3">
+            <Sheet testid="peek" class="px-4 pb-3" swipeAll
+              onUp={() => { if (active.length) { setSheet('list'); setPresenceMenu(false); } else setPresenceMenu(true); }}
+              onDown={() => setPresenceMenu(false)}
+              onHandle={() => { if (active.length) { setSheet('list'); setPresenceMenu(false); } else setPresenceMenu((v) => !v); }}>
               {presenceMenu && (
                 <div class="px-1 pb-3 space-y-3 fade-in" data-testid="presence-menu">
                   <div class="text-[14px] text-muted">{sharing
@@ -338,7 +360,7 @@ function IncidentCard({ inc, r, onClose, sharingFor, wx, threats: th, role, onMo
   const canMove = role === 'responder' || role === 'coordinator' || role === 'admin';
   const canDelete = role === 'coordinator' || role === 'admin';
   return (
-    <Sheet testid="incident-sheet" class="px-5 pb-5 max-h-[66vh] overflow-y-auto">
+    <Sheet testid="incident-sheet" class="px-5 pb-5 max-h-[66vh] overflow-y-auto" onDown={onClose}>
       <div class="flex items-start gap-2">
         <div class="flex-1 min-w-0">
           <h2 class="font-display text-[24px] leading-tight truncate">{title}</h2>
@@ -438,6 +460,7 @@ function SpreadPanel({ wx, th }: { wx: Weather | null; th: Threat[] }) {
     </div>
   );
 }
+const HAZARD_LABEL: Record<string, string> = { road_blocked: 'Road blocked', tree_down: 'Tree down', bridge: 'Bridge unsafe', other: 'Hazard' };
 const fmtDistanceShort = (m: number) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`);
 
 export const DANGER_LABEL: Record<string, string> = { low: 'Low', moderate: 'Moderate', high: 'High', very_high: 'Very high', extreme: 'Extreme' };
@@ -488,7 +511,7 @@ function InstallNudge() {
   return (
     <span class="pointer-events-auto flex items-center h-9 rounded-pill bg-card text-ink shadow-capsule text-[13px] font-medium fade-in" data-testid="install-nudge">
       <button class="press pl-3.5 pr-1.5 h-full flex items-center gap-2" onClick={async () => {
-        if (mode === 'prompt') { if (await promptInstall()) toast('Installed. Open EPB Fire from your home screen.'); }
+        if (mode === 'prompt') { if (await promptInstall()) toast('Installed. Open EmberWatch from your home screen.'); }
         else toast('On iPhone: tap Share, then "Add to Home Screen".', 'warn');
       }}><Download size={15} class="text-muted" />Install app</button>
       <button aria-label="Dismiss" class="pr-3 pl-1 h-full text-muted" onClick={dismiss}><X size={15} /></button>

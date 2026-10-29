@@ -46,11 +46,34 @@ export function Choice(p: { selected: boolean; onClick: () => void; children: Co
   );
 }
 
+/** Vertical swipe on a drawer: up / down by more than 30 px (or a plain tap, if onTap is given). */
+export function swipe(on: { up?: () => void; down?: () => void; tap?: () => void }) {
+  let y0: number | null = null, t0 = 0;
+  return {
+    onPointerDown: (e: PointerEvent) => { y0 = e.clientY; t0 = Date.now(); },
+    onPointerUp: (e: PointerEvent) => {
+      if (y0 == null) return;
+      const dy = e.clientY - y0; y0 = null;
+      if (dy < -30) on.up?.();
+      else if (dy > 30) on.down?.();
+      else if (Math.abs(dy) < 8 && Date.now() - t0 < 500) on.tap?.();
+    },
+    onPointerCancel: () => { y0 = null; },
+    style: { touchAction: 'pan-x' } as any,
+  };
+}
+
 /** Bottom sheet surface (floats over the map). */
-export function Sheet(p: { children: ComponentChildren; class?: string; testid?: string; handle?: boolean }) {
+export function Sheet(p: { children: ComponentChildren; class?: string; testid?: string; handle?: boolean; onUp?: () => void; onDown?: () => void; onHandle?: () => void; swipeAll?: boolean }) {
   return (
-    <div data-testid={p.testid} class={cx('bg-card rounded-t-sheet shadow-sheet sheet-enter', p.class)}>
-      {p.handle !== false && <div class="pt-2 pb-1 flex justify-center"><span class="w-9 h-1 rounded-full bg-schh" /></div>}
+    <div data-testid={p.testid} class={cx('bg-card rounded-t-sheet shadow-sheet sheet-enter', p.class)} {...(p.swipeAll ? swipe({ up: p.onUp, down: p.onDown }) : {})}>
+      {p.handle !== false && (
+        <div role={p.onHandle ? 'button' : undefined} aria-label={p.onHandle ? 'Expand or collapse' : undefined} data-testid={p.testid ? p.testid + '-handle' : undefined}
+          class={cx('pt-2.5 pb-2 flex justify-center select-none', (p.onHandle || p.onUp || p.onDown) && 'cursor-pointer')}
+          {...swipe({ up: p.swipeAll ? undefined : p.onUp, down: p.swipeAll ? undefined : p.onDown, tap: p.onHandle })}>
+          <span class="w-10 h-1.5 rounded-full bg-schh" />
+        </div>
+      )}
       {p.children}
     </div>
   );

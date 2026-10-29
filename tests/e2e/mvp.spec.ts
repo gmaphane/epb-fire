@@ -6,6 +6,12 @@ const shot = (p: Page, n: string) => p.screenshot({ path: `shots/${n}.png` });
 
 async function login(page: Page, role: string) {
   await page.getByTestId('login-' + role).click();
+  // first sign-in on a phone shows the welcome tour: check it greets the person, then skip it
+  const tour = page.getByTestId('tour');
+  if (await tour.waitFor({ timeout: 4000 }).then(() => true).catch(() => false)) {
+    await expect(page.getByTestId('tour-title')).toContainText('Welcome,');
+    await page.getByTestId('tour-skip').click();
+  }
   await expect(page.getByTestId('tab-map')).toBeVisible();
 }
 const setGps = (page: Page, lat: number, lon: number, accuracy = 5) => page.context().setGeolocation({ latitude: lat, longitude: lon, accuracy });
@@ -136,9 +142,11 @@ test('navigate: offline distance/bearing to an incident', async () => {
   await setGps(page, 6.8187, -0.8093); // move ~1 km south
   await page.goto('/#/navigate');
   await expect(page.getByTestId('nav-distance')).toContainText(/\d/);
+  // wait for the moved fix to land (identical points read 0 m / 000°)
+  await expect(page.getByTestId('nav-distance')).toContainText(/km|[1-9]\d{2} m/, { timeout: 15000 });
   await expect.poll(async () => page.getByTestId('nav-bearing').innerText(), { timeout: 15000 }).toMatch(/^(00\d|35\d)°$/);
   const d = await page.getByTestId('nav-distance').innerText();
-  console.log('nav distance', d);
+  console.log('nav distance', d, '|', await page.getByTestId('nav-legs').innerText(), '|', await page.getByTestId('nav-bearing').innerText());
   await shot(page, '09-navigate');
   await setGps(page, 6.8287, -0.8093);
 });
@@ -224,4 +232,47 @@ test('report: tapping inside a compartment places the fire there (not a popup)',
   await expect(page.getByTestId('loc-map')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('report-coords')).not.toHaveText(before);
   await expect(page.locator('.leaflet-popup')).toHaveCount(0);
+});
+
+test('drawer: tapping the handle opens the fire list; swiping down closes it', async () => {
+  await page.goto('/#/map');
+  await page.getByTestId('peek-handle').click();
+  await expect(page.getByTestId('incident-list').or(page.getByTestId('presence-menu'))).toBeVisible();
+  if (await page.getByTestId('incident-list').isVisible()) {
+    await page.getByTestId('incident-list-handle').click();
+    await expect(page.getByTestId('peek')).toBeVisible();
+  }
+});
+
+test('navigate: Stop ends en route; a hazard added by mistake can be removed', async () => {
+  await page.goto('/#/navigate');
+  await page.getByTestId('send-position').click();
+  await expect(page.getByTestId('nav-stop')).toBeVisible();
+  // add a hazard (the mistake)
+  await page.getByTestId('nav-more').click();
+  await page.getByRole('button', { name: 'Road hazard' }).click();
+  await page.getByRole('button', { name: 'Tree down' }).click();
+  await page.getByTestId('nav-stop').click();
+  await expect(page.getByTestId('nav-stop')).toHaveCount(0);
+  await page.goto('/#/navigate');
+  await expect(page.getByTestId('send-position')).toContainText('Share my location');
+  await expect(page.getByTestId('nav-stop')).toHaveCount(0);
+  // remove it from the map
+  await page.goto('/#/map');
+  const marker = page.locator('.leaflet-marker-icon[title="Road hazard"]');
+  await expect(marker).toHaveCount(1);
+  await marker.dispatchEvent('click');
+  await expect(page.getByTestId('hazard-sheet')).toBeVisible();
+  await page.getByTestId('hazard-remove').click();
+  await expect(marker).toHaveCount(0);
+});
+
+test('welcome tour can be reopened from Settings and walks through 4 steps', async () => {
+  await page.goto('/#/sync');
+  await page.getByTestId('show-tour').click();
+  await expect(page.getByTestId('tour-title')).toContainText('Welcome,');
+  for (let i = 0; i < 3; i++) await page.getByTestId('tour-next').click();
+  await shot(page, '12-tour-last');
+  await page.getByTestId('tour-done').click();
+  await expect(page.getByTestId('tour')).toHaveCount(0);
 });

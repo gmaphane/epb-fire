@@ -7,12 +7,12 @@ import { CONFIG } from '../config';
 import { bearingDeg, cardinal, fmtDistance, haversineM } from '../core/geo';
 import { isOpen } from '../core/flow';
 import { quality, keepAwake } from '../core/gps';
-import { AppBar, Button, CoordReadout, cx } from './kit';
+import { AppBar, Button, CoordReadout, cx, swipe } from './kit';
 import { back, go, useCompass, useGpsFix } from './hooks';
 import { MapController } from './mapview';
 import { metaSet } from '../core/db';
 import { route } from '../core/route';
-import { setPresence } from '../core/presence';
+import { setPresence, stopResponding } from '../core/presence';
 
 
 export function NavigateScreen({ kind, id }: { kind?: string; id?: string }) {
@@ -109,13 +109,14 @@ export function NavigateScreen({ kind, id }: { kind?: string; id?: string }) {
 
       {/* bottom sheet: the essentials always; the rest on demand */}
       <div class="absolute inset-x-0 bottom-0 z-[1000] bg-card rounded-t-sheet shadow-sheet pb-4 pb-safe sheet-enter" data-testid="nav-sheet">
-        <button aria-label={more ? 'Show less' : 'Show more'} data-testid="nav-more" onClick={() => setMore((v) => !v)} class="w-full pt-2 pb-2 flex justify-center"><span class="w-9 h-1 rounded-full bg-schh" /></button>
+        <div {...swipe({ up: () => setMore(true), down: () => setMore(false) })}>
+        <button aria-label={more ? 'Show less' : 'Show more'} data-testid="nav-more" onClick={() => setMore((v) => !v)} class="w-full pt-2.5 pb-2.5 flex justify-center"><span class="w-10 h-1.5 rounded-full bg-schh" /></button>
         <div class="px-5 flex items-end gap-5">
-          <div>
+          <div role="button" class="cursor-pointer" onClick={() => setMore((v) => !v)}>
             <div class="text-[34px] font-semibold num leading-none tracking-[-.02em]">{isFinite(etaMin) ? `${etaMin} min` : '—'}</div>
             <div class="text-[13px] text-muted mt-1.5">to arrive</div>
           </div>
-          <div class="min-w-0 flex-1">
+          <div class="min-w-0 flex-1 cursor-pointer" role="button" onClick={() => setMore((v) => !v)}>
             <div class="text-[20px] font-semibold num leading-none" data-testid="nav-distance">{isFinite(dist) ? (dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(dist < 10_000 ? 1 : 0)} km`) : '—'}</div>
             <div class="text-[13px] text-muted mt-1.5 truncate" data-testid="nav-legs">
               {r?.viaTracks ? `${mode === 'drive' ? 'By road' : 'On tracks'}${r.offRoadM > 40 ? `, ${fmtDistance(r.offRoadM)} on foot` : ''}` : 'Straight line on foot'}
@@ -128,16 +129,20 @@ export function NavigateScreen({ kind, id }: { kind?: string; id?: string }) {
           </div>
         </div>
 
-        <div class="px-5 mt-5">
+        </div>
+        <div class="px-5 mt-5 flex gap-2">
           {assign && nextAction ? (
-            <Button kind="primary" size="lg" full testid={nextAction === 'ack' ? 'nav-ack' : nextAction === 'en_route' ? 'nav-enroute' : 'nav-onscene'} onClick={() => void assignmentAction(assign, nextAction)}>
+            <Button kind="primary" size="lg" class="flex-1" testid={nextAction === 'ack' ? 'nav-ack' : nextAction === 'en_route' ? 'nav-enroute' : 'nav-onscene'} onClick={() => void assignmentAction(assign, nextAction)}>
               {nextAction === 'ack' ? 'Acknowledge call-out' : nextAction === 'en_route' ? "I'm on my way" : "I'm on scene"}
             </Button>
           ) : target.incidentId ? (
-            <Button kind={sharingHere ? 'tonal' : 'primary'} size="lg" full testid="send-position" icon={<RadioTower size={18} />} onClick={async () => { await addNote(target!.incidentId!, 'Position update'); if (!sharingHere) await setPresence('en_route', target!.incidentId!); toast(sharingHere ? 'Position update sent' : 'Sharing your live location'); }}>
+            <Button kind={sharingHere ? 'tonal' : 'primary'} size="lg" class="flex-1" testid="send-position" icon={<RadioTower size={18} />} onClick={async () => { await addNote(target!.incidentId!, 'Position update'); if (!sharingHere) await setPresence('en_route', target!.incidentId!); toast(sharingHere ? 'Position update sent' : 'Sharing your live location'); }}>
               {sharingHere ? 'Send position update' : 'Share my location'}
             </Button>
           ) : null}
+          {sharingHere && (
+            <Button kind="secondary" size="lg" testid="nav-stop" class="!px-5 shrink-0" onClick={() => void stopResponding().then(() => { toast('Navigation stopped'); back(); })}>Stop</Button>
+          )}
         </div>
 
         {more && (
