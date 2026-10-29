@@ -124,7 +124,7 @@ export function ReportScreen({ detection }: { detection: string | null }) {
         {g.status === 'denied' && <Banner tone="err">Location is blocked. Tap the map to place the fire.</Banner>}
         {g.fix && q === 'poor' && mode === 'gps' && <Banner tone="warn">Weak GPS (±{Math.round(g.fix.acc)} m). Drag the flame to correct it.</Banner>}
         <div>
-          <h2 class="font-display text-[20px] mb-3">Where is it?</h2>
+          <h2 class="font-display text-[18px] mb-3">Where is it?</h2>
           <div class="grid grid-cols-3 gap-1 p-1 bg-sc rounded-pill" role="tablist">
             {([['gps', 'My GPS', <LocateFixed size={16} />], ['map', 'On map', <MapPin size={16} />], ['manual', 'Type in', <Keyboard size={16} />]] as const).map(([k, l, ic]) => (
               <button key={k} role="tab" aria-selected={mode === k} data-testid={'loc-' + k} onClick={() => { setMode(k); if (k === 'map' && !pin && live) setPin({ lat: live.lat, lon: live.lon }); }} class={cx('press min-h-[42px] rounded-pill text-[14px] font-medium inline-flex items-center justify-center gap-1.5', mode === k ? 'bg-card shadow-l1 text-ink' : 'text-muted')}>{ic}{l}</button>
@@ -162,11 +162,11 @@ export function ReportScreen({ detection }: { detection: string | null }) {
           </Banner>
         )}
         <div>
-          <h2 class="font-display text-[20px] mb-3">Who saw it?</h2>
+          <h2 class="font-display text-[18px] mb-3">Who saw it?</h2>
           <div class="flex flex-wrap gap-2">{SOURCES.map(([k, l]) => <Choice key={k} testid={'src-' + k} selected={source === k} onClick={() => setSource(k)}>{l}</Choice>)}</div>
         </div>
         <div>
-          <h2 class="font-display text-[20px] mb-3">How big? <span class="text-[14px] font-sans text-muted">SOP category</span></h2>
+          <h2 class="font-display text-[18px] mb-3">How big? <span class="text-[14px] font-sans text-muted">SOP category</span></h2>
           <div class="flex flex-wrap gap-2">
             <Choice testid="cat-none" selected={cat === null} onClick={() => setCat(null)}>Not sure</Choice>
             {CATEGORIES.map((c) => <Choice key={c} testid={'cat-' + c} selected={cat === c} onClick={() => setCat(c)}>{c} · {CATEGORY[c].name}</Choice>)}

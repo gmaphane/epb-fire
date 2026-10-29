@@ -37,7 +37,7 @@ export function CrewsScreen() {
       <Card class={sharing ? 'bg-moss border-transparent' : ''}>
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0">
-            <div class="font-display text-[19px] leading-snug">{sharing ? (s.presence!.status === 'standby' ? 'You are on standby' : s.presence!.status === 'en_route' ? `You are en route${incCode(s.presence!.incident_id) ? ` to ${incCode(s.presence!.incident_id)}` : ''}` : 'You are on scene') : 'You are not sharing your location'}</div>
+            <div class="font-display text-[16px] leading-snug">{sharing ? (s.presence!.status === 'standby' ? 'You are on standby' : s.presence!.status === 'en_route' ? `You are en route${incCode(s.presence!.incident_id) ? ` to ${incCode(s.presence!.incident_id)}` : ''}` : 'You are on scene') : 'You are not sharing your location'}</div>
             <div class="text-[13px] text-muted mt-0.5">{sharing ? 'Control can see where you are' : 'Check in when your shift starts'}</div>
           </div>
           {sharing
@@ -52,7 +52,7 @@ export function CrewsScreen() {
         const Icon = gr.icon;
         return (
           <section key={gr.key} data-testid={'crews-' + gr.key}>
-            <h2 class="font-display text-[20px] mb-3 flex items-center gap-2">{gr.title} <span class="font-sans text-[14px] text-muted">{list.length}</span></h2>
+            <h2 class="font-display text-[18px] mb-3 flex items-center gap-2">{gr.title} <span class="font-sans text-[14px] text-muted">{list.length}</span></h2>
             <div class="bg-card rounded-card border border-line divide-y divide-line overflow-hidden">
               {list.map((p) => {
                 const me = p.id === s.me?.id;
@@ -74,7 +74,7 @@ export function CrewsScreen() {
           </section>
         );
       })}
-      {!people.length && <div class="text-center py-12 fade-in"><div class="font-display text-[22px]">No one out yet</div><div class="text-[14px] text-muted mt-1">Crews appear here when they check in.</div></div>}
+      {!people.length && <div class="text-center py-12 fade-in"><div class="font-display text-[20px]">No one out yet</div><div class="text-[14px] text-muted mt-1">Crews appear here when they check in.</div></div>}
     </Screen>
   );
 }

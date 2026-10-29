@@ -61,7 +61,7 @@ export function IncidentScreen({ id }: { id: string }) {
     } catch (e) { toast((e as Error).message, 'err'); }
   };
 
-  const H = ({ children }: { children: any }) => <h2 class="font-display text-[20px] mb-3">{children}</h2>;
+  const H = ({ children }: { children: any }) => <h2 class="font-display text-[18px] mb-3">{children}</h2>;
   const shown = showAll ? events : events.slice(0, 5);
   return (
     <Screen title={inc.compartment ?? inc.block ?? 'Unmapped area'} sub={`${inc.code ?? inc.label} · ${ago(inc.reported_at, now)}`} back={back} right={<StatusChip s={inc.status} short />}>
@@ -241,7 +241,7 @@ function AfterOut({ out, cat, submitted, canRecord, onRecord, now }: { out: stri
   return (
     <section class="rounded-card border border-line bg-card p-4" data-testid="after-out">
       <div class="flex items-center justify-between gap-2">
-        <h2 class="font-display text-[20px]">After Out</h2>
+        <h2 class="font-display text-[18px]">After Out</h2>
         <span class="text-[13px] text-muted num">Out {when(Date.parse(out))}</span>
       </div>
       {patrolOn && <div class="mt-2 rounded-2xl bg-amber-bg text-amber px-3 py-2 text-[14px] font-semibold" data-testid="patrol-on">Fire Watch Patrol on until {when(a.patrolUntil!)}</div>}

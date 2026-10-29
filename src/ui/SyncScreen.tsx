@@ -91,7 +91,7 @@ export function SyncScreen() {
 
       {items.length > 0 && (
         <Card>
-          <h2 class="font-display text-[20px] mb-3">Waiting to send</h2>
+          <h2 class="font-display text-[18px] mb-3">Waiting to send</h2>
           <div class="space-y-1.5 max-h-56 overflow-y-auto" data-testid="outbox-list">
             {items.slice(0, 40).map((i) => (
               <div key={i.key} class="flex items-start justify-between gap-2 text-[14px] border-b border-line last:border-0 pb-2">
@@ -105,7 +105,7 @@ export function SyncScreen() {
 
       {can(role, 'admin') && (
         <Card testid="admin-card">
-          <h2 class="font-display text-[20px] mb-3">Admin</h2>
+          <h2 class="font-display text-[18px] mb-3">Admin</h2>
           <div class="grid grid-cols-2 gap-2">
             <Button kind="primary" testid="open-admin" icon={<Users size={17} />} onClick={() => go('admin')}>Users</Button>
             <Button testid="admin-export" icon={<FileSpreadsheet size={17} />} onClick={() => { downloadBlob(`EPB_fire_incidents_${new Date().toISOString().slice(0, 10)}.xlsx`, incidentsWorkbook()); toast('Spreadsheet downloaded'); }}>Incidents (Excel)</Button>
@@ -116,7 +116,7 @@ export function SyncScreen() {
       <AlertsCard />
 
       <Card>
-        <h2 class="font-display text-[20px] mb-3">Ready for offline use?</h2>
+        <h2 class="font-display text-[18px] mb-3">Ready for offline use?</h2>
         <ul class="space-y-2.5 text-[14px]">
           <Check ok={s.compartments.length > 0} label={`Site data (${s.compartments.length} compartments)`} bad="go online once and tap Sync now" />
           <Check ok={!!pack && pack.have >= pack.total * 0.9} label="Offline map" bad="downloads automatically when online" />
@@ -127,7 +127,7 @@ export function SyncScreen() {
       </Card>
 
       <Card>
-        <h2 class="font-display text-[20px] mb-3">Offline map pack</h2>
+        <h2 class="font-display text-[18px] mb-3">Offline map pack</h2>
         <div class="flex p-1 bg-sc rounded-pill mb-3">{(['satellite', 'street'] as const).map((b) => <button key={b} onClick={() => { setState({ basemap: b }); void metaSet('basemap', b); }} class={cx('press flex-1 h-9 rounded-pill text-[14px] font-medium', s.basemap === b ? 'bg-card text-ink shadow-l1' : 'text-muted')}>{b === 'satellite' ? 'Satellite' : 'Street'}</button>)}</div>
         <div class="text-[14px] text-muted num">About {plan.estMb} MB · {plan.tiles} tiles</div>
         {!prog && auto && <div class="mt-2" data-testid="auto-pack"><div class="h-2 rounded-full bg-surface-mid overflow-hidden"><div class="h-full bg-brand" style={{ width: `${(auto.done / Math.max(1, auto.total)) * 100}%` }} /></div><div class="text-xs text-muted mt-1 num">Downloading automatically · {auto.done}/{auto.total}</div></div>}
@@ -138,7 +138,7 @@ export function SyncScreen() {
 
       {can(role, 'readiness') && (
         <Card>
-          <h2 class="font-display text-[20px] mb-3">Season readiness (shown to everyone)</h2>
+          <h2 class="font-display text-[18px] mb-3">Season readiness (shown to everyone)</h2>
           <div class="grid grid-cols-3 gap-2">
             {([['green', 'Green', 'bg-moss text-ok'], ['amber', 'Amber', 'bg-amber-bg text-amber'], ['red', 'Red', 'bg-fire-bg text-fire']] as const).map(([k, l, c]) => (
               <button key={k} data-testid={'ready-' + k} onClick={async () => { await setReadiness(k, s.readiness?.note ?? ''); toast(`Readiness ${l}`); }} class={cx('press min-h-[48px] rounded-pill font-semibold border-2', c, (s.readiness?.level ?? 'green') === k ? 'border-ink' : 'border-transparent')}>{l}</button>
@@ -148,18 +148,18 @@ export function SyncScreen() {
       )}
 
       <Card>
-        <h2 class="font-display text-[20px] mb-3">Display</h2>
+        <h2 class="font-display text-[18px] mb-3">Display</h2>
         <div class="flex p-1 bg-sc rounded-pill">{([['auto', 'Auto', <Smartphone size={16} />], ['day', 'Day', <Sun size={16} />], ['night', 'Night', <Moon size={16} />]] as const).map(([k, l, ic]) => <button key={k} data-testid={'theme-' + k} class={cx('press flex-1 h-10 rounded-pill text-[14px] font-medium inline-flex items-center justify-center gap-1.5', s.theme === k ? 'bg-card text-ink shadow-l1' : 'text-muted')} onClick={() => { setState({ theme: k }); void saveTheme(k); }}>{ic}{l}</button>)}</div>
         <p class="text-[13px] text-muted mt-2">Auto turns night mode on 18:00–06:00.</p>
       </Card>
 
       <Card>
-        <h2 class="font-display text-[20px] mb-3">Data</h2>
+        <h2 class="font-display text-[18px] mb-3">Data</h2>
         <div class="grid grid-cols-2 gap-2"><Button onClick={() => void exportGeo()} testid="export-geojson">Export GeoJSON</Button><Button onClick={() => void exportCsv()}>Export CSV</Button></div>
       </Card>
 
       <Card>
-        <h2 class="font-display text-[20px] mb-3">Testing &amp; account</h2>
+        <h2 class="font-display text-[18px] mb-3">Testing &amp; account</h2>
         <label class="flex items-center justify-between gap-3 min-h-[48px] text-[15px]">Simulate no network<input data-testid="sim-offline" type="checkbox" class="w-6 h-6 accent-[#2F8F5B]" checked={!!sy?.simulateOffline} onChange={(e) => engine.setSimulateOffline((e.target as HTMLInputElement).checked)} /></label>
         <div class="text-[13px] text-muted mt-1">{s.me?.name} · {s.me?.role} · v{CONFIG.version}{IS_DEMO ? ' · DEMO server' : ''}</div>
         <div class="grid grid-cols-2 gap-2 mt-3">
@@ -196,7 +196,7 @@ function AlertsCard() {
   };
   return (
     <Card testid="alerts-card">
-      <h2 class="font-display text-[20px] mb-3">Fire alerts on this phone</h2>
+      <h2 class="font-display text-[18px] mb-3">Fire alerts on this phone</h2>
       <p class={cx('text-[15px]', st === 'on' ? 'text-ok' : st === 'blocked' ? 'text-fire' : 'text-ink')}>{st ? text[st] : 'Checking…'}</p>
       <div class="grid grid-cols-2 gap-2 mt-3">
         {st === 'on'

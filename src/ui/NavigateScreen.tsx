@@ -67,7 +67,7 @@ export function NavigateScreen({ kind, id }: { kind?: string; id?: string }) {
     c.setMe(f);
     const grp = c.extra(); grp.clearLayers();
     c.setRoutes(r ? [{ coords: r.coords, primary: true }] : []);
-    if (kind === 'water') L.marker([target.lat, target.lon], { interactive: false, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div style="transform:translate(-50%,-16px);display:flex;flex-direction:column;align-items:center"><span class="pulse" style="width:32px;height:32px;border-radius:9999px;background:${kind === 'water' ? '#2563EB' : '#E2483D'};display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.25)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${kind === 'water' ? '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>' : '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>'}</svg></span></div>` }) }).addTo(grp);
+    if (kind === 'water') L.marker([target.lat, target.lon], { interactive: false, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div style="transform:translate(-50%,-16px);display:flex;flex-direction:column;align-items:center"><span class="pulse" style="width:32px;height:32px;border-radius:9999px;background:${kind === 'water' ? '#2563EB' : '#EF233C'};display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.25)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${kind === 'water' ? '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>' : '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>'}</svg></span></div>` }) }).addTo(grp);
   }, [f?.lat, f?.lon, target?.key, s.incidents, s.assets, r]);
   const fitBoth = () => { if (ctl.current && target) ctl.current.fit(r ? r.coords : f ? [[f.lat, f.lon], [target.lat, target.lon]] : [[target.lat, target.lon]], 40, { top: 120, bottom: 230 }); };
   useEffect(() => { setTimeout(fitBoth, 50); }, [target?.key, !!f]);
@@ -75,7 +75,7 @@ export function NavigateScreen({ kind, id }: { kind?: string; id?: string }) {
   if (!target) {
     return (
       <div class="h-full flex flex-col bg-surface"><AppBar title="Navigate" back={back} />
-        <main class="flex-1 p-4"><div class="text-center text-muted py-16"><div class="font-display text-[22px] text-ink mb-1">Nothing to navigate to</div>Pick a fire on the map or in Fires.</div></main>
+        <main class="flex-1 p-4"><div class="text-center text-muted py-16"><div class="font-display text-[20px] text-ink mb-1">Nothing to navigate to</div>Pick a fire on the map or in Fires.</div></main>
       </div>
     );
   }
@@ -96,7 +96,7 @@ export function NavigateScreen({ kind, id }: { kind?: string; id?: string }) {
           <button aria-label="Back" onClick={back} class="press w-10 h-10 rounded-full flex items-center justify-center shrink-0"><ChevronLeft size={26} /></button>
           <span class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0"><Navigation2 size={20} fill="currentColor" style={{ transform: `rotate(${arrowDeg}deg)`, transition: 'transform .4s cubic-bezier(.2,.8,.2,1)' }} /></span>
           <div class="flex-1 min-w-0">
-            <div class="font-display text-[20px] leading-tight truncate">{isFinite(brg) ? `Head ${cardinal(brg)}` : 'Finding you…'} <span class="opacity-70 num" data-testid="nav-bearing">{isFinite(brg) ? `${String(Math.round(brg)).padStart(3, '0')}°` : ''}</span></div>
+            <div class="font-display text-[18px] leading-tight truncate">{isFinite(brg) ? `Head ${cardinal(brg)}` : 'Finding you…'} <span class="opacity-70 num" data-testid="nav-bearing">{isFinite(brg) ? `${String(Math.round(brg)).padStart(3, '0')}°` : ''}</span></div>
             <div class="text-[13px] opacity-75 truncate flex items-center gap-1.5">{kind === 'water' ? <Droplets size={13} /> : <Flame size={13} />}{target.name}</div>
           </div>
           <span data-testid="gps-quality" class={cx('px-2.5 py-1 rounded-pill text-[12px] font-semibold num shrink-0', !f ? 'bg-white/10' : q === 'good' ? 'bg-white/15' : q === 'fair' ? 'bg-amber-bg text-amber' : 'bg-fire text-on-fire')}>{f ? `±${Math.round(f.acc)} m` : g.status === 'denied' ? 'GPS off' : 'GPS…'}</span>

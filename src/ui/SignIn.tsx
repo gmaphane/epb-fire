@@ -18,7 +18,7 @@ export function SignIn() {
   return (
     <div class="h-full overflow-y-auto bg-surface px-6 pt-safe">
       <div class="max-w-md mx-auto min-h-full flex flex-col pt-16 pb-10 screen-in">
-        <div class="w-14 h-14 rounded-[18px] bg-brand flex items-center justify-center shadow-l2"><Flame size={28} class="text-[#F0675C]" fill="#F0675C" /></div>
+        <div class="w-14 h-14 rounded-[18px] bg-brand flex items-center justify-center shadow-l2"><Flame size={28} class="text-[#FF6375]" fill="#FF6375" /></div>
         <h1 class="font-display text-[38px] leading-[1.05] mt-8">{CONFIG.appName}</h1>
         <p class="text-[17px] mt-1">Fire response · Bandai Hills</p>
         <p class="text-[15px] text-muted mt-3">Works with no signal after the first sign-in.</p>

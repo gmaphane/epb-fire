@@ -40,7 +40,7 @@ export function Choice(p: { selected: boolean; onClick: () => void; children: Co
   return (
     <button data-testid={p.testid} aria-pressed={p.selected} onClick={p.onClick}
       class={cx('press border font-medium', p.tile ? 'rounded-2xl flex flex-col items-center justify-center gap-1.5 min-h-[76px] px-2 text-[13px]' : 'rounded-pill min-h-[40px] px-4 text-[14px] inline-flex items-center gap-1.5',
-        p.selected ? 'bg-moss border-ok/40 text-on-moss' : 'bg-card border-line text-ink', p.class)}>
+        p.selected ? 'bg-brand border-brand text-on-brand' : 'bg-card border-line text-ink', p.class)}>
       {p.icon}{p.children}
     </button>
   );
@@ -190,7 +190,7 @@ export function AppBar(p: { title: string; sub?: string; back?: () => void; righ
       <div class={cx('px-4 flex items-center gap-2', p.back ? 'h-14' : 'h-16')}>
         {p.back && <button aria-label="Back" onClick={p.back} class="press -ml-2 w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-ink"><ChevronLeft size={26} strokeWidth={2} /></button>}
         <div class="flex flex-col min-w-0 flex-1">
-          <h1 class={cx('font-display truncate leading-tight', p.back ? 'text-[20px]' : 'text-[28px]')} data-testid="appbar-title">{p.title}</h1>
+          <h1 class={cx('font-display truncate leading-tight', p.back ? 'text-[20px]' : 'text-[24px]')} data-testid="appbar-title">{p.title}</h1>
           {p.sub && <span class="text-[13px] text-muted truncate">{p.sub}</span>}
         </div>
         <div class="flex items-center shrink-0 -mr-2">

@@ -53,7 +53,7 @@ export function IncidentsScreen() {
           {list.length === 0 && (
             <div class="text-center py-14 fade-in">
               <div class="w-14 h-14 rounded-full bg-moss text-on-moss mx-auto flex items-center justify-center mb-3"><BadgeCheck size={26} /></div>
-              <div class="font-display text-[22px]">No fires here</div>
+              <div class="font-display text-[20px]">No fires here</div>
               <div class="text-[14px] text-muted mt-1">Report one if you see smoke.</div>
             </div>
           )}
@@ -62,7 +62,7 @@ export function IncidentsScreen() {
 
         {f !== 'closed' && dets.length > 0 && can(role, 'respond') && (
           <section class="mt-7 px-4">
-            <h2 class="font-display text-[20px] mb-3 flex items-center gap-2">Satellite hotspots <span class="text-[14px] font-sans text-muted">{dets.length}</span></h2>
+            <h2 class="font-display text-[18px] mb-3 flex items-center gap-2">Satellite hotspots <span class="text-[14px] font-sans text-muted">{dets.length}</span></h2>
             <div class="bg-card rounded-card border border-line divide-y divide-line overflow-hidden">
               {dets.map((d) => (
                 <button key={d.id} data-testid="detection-card" class="press w-full px-4 py-3 flex items-center gap-3 text-left active:bg-surface-low" onClick={() => go('report?det=' + d.id)}>

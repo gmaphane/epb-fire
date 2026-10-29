@@ -1,6 +1,5 @@
 @import 'leaflet/dist/leaflet.css';
-@import '@fontsource-variable/dm-sans/wght.css';
-@import '@fontsource-variable/fraunces/wght.css';
+@import '@fontsource-variable/inter/index.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,40 +8,39 @@
    Red is reserved for fire. Blue is "you" and routes. Sage marks selection, safety and sync. */
 :root,
 [data-theme='day'] {
-  --c-surface: 245 246 240; --c-surface-low: 238 240 232; --c-surface-mid: 226 230 219; --c-card: 255 255 255;
-  --c-sc: 238 240 232; --c-sch: 226 230 219; --c-schh: 201 207 194;
-  --c-ink: 20 33 29; --c-muted: 92 106 100; --c-faint: 145 157 151; --c-line: 228 231 222; --c-outline: 152 163 157; --c-outline-v: 205 211 199;
-  --c-brand: 19 60 52; --c-brand-deep: 19 60 52; --c-brand-c: 28 77 67; --c-on-brand: 255 255 255;
+  /* Fire safety palette: Fire Engine Red #D90429, Red Pantone #EF233C, Anti-Flash White #EDF2F4, Cool Gray #8D99AE, Space Cadet #2B2D42 */
+  --c-surface: 237 242 244; --c-surface-low: 228 234 237; --c-surface-mid: 216 223 228; --c-card: 255 255 255;
+  --c-sc: 228 234 237; --c-sch: 216 223 228; --c-schh: 189 197 208;
+  --c-ink: 43 45 66; --c-muted: 92 101 121; --c-faint: 141 153 174; --c-line: 221 227 233; --c-outline: 141 153 174; --c-outline-v: 200 207 216;
+  --c-brand: 43 45 66; --c-brand-deep: 43 45 66; --c-brand-c: 61 64 91; --c-on-brand: 255 255 255;
   --c-moss: 221 238 223; --c-on-moss: 30 91 58; --c-ok: 47 143 91;
-  --c-fire: 226 72 61; --c-fire-dark: 199 55 45; --c-fire-bg: 252 237 234; --c-on-fire: 255 255 255; --c-on-fire-bg: 169 41 31;
+  --c-fire: 239 35 60; --c-fire-dark: 217 4 41; --c-fire-bg: 253 232 235; --c-on-fire: 255 255 255; --c-on-fire-bg: 166 3 31;
   --c-cobalt: 37 99 235; --c-cobalt-bg: 234 241 254;
   --c-amber: 168 98 0; --c-amber-bg: 253 244 227;
   --c-resp: 214 104 26; --c-resp-bg: 253 240 228;
   --c-cont: 47 143 91; --c-cont-bg: 221 238 223;
   --c-sat: 150 60 175; --c-sat-bg: 247 237 249;
-  --c-slate: 92 106 100; --c-inverse: 19 60 52;
-  color-scheme: light;
+  --c-slate: 92 101 121; --c-inverse: 43 45 66;
 }
 [data-theme='night'] {
-  --c-surface: 12 22 19; --c-surface-low: 18 31 27; --c-surface-mid: 26 42 37; --c-card: 19 33 29;
-  --c-sc: 26 42 37; --c-sch: 36 55 47; --c-schh: 51 72 63;
-  --c-ink: 233 239 234; --c-muted: 159 176 168; --c-faint: 108 125 117; --c-line: 31 48 42; --c-outline: 108 125 117; --c-outline-v: 51 72 63;
-  --c-brand: 168 213 186; --c-brand-deep: 168 213 186; --c-brand-c: 191 226 204; --c-on-brand: 12 22 19;
+  --c-surface: 24 25 38; --c-surface-low: 30 32 48; --c-surface-mid: 43 45 66; --c-card: 34 36 54;
+  --c-sc: 43 45 66; --c-sch: 55 58 82; --c-schh: 75 79 105;
+  --c-ink: 237 242 244; --c-muted: 160 170 188; --c-faint: 120 130 150; --c-line: 48 51 74; --c-outline: 120 130 150; --c-outline-v: 64 67 94;
+  --c-brand: 237 242 244; --c-brand-deep: 237 242 244; --c-brand-c: 214 221 226; --c-on-brand: 43 45 66;
   --c-moss: 23 53 40; --c-on-moss: 168 213 186; --c-ok: 111 207 151;
-  --c-fire: 240 103 92; --c-fire-dark: 226 72 61; --c-fire-bg: 58 21 18; --c-on-fire: 255 255 255; --c-on-fire-bg: 247 184 177;
+  --c-fire: 239 35 60; --c-fire-dark: 255 99 117; --c-fire-bg: 70 18 30; --c-on-fire: 255 255 255; --c-on-fire-bg: 255 176 186;
   --c-cobalt: 110 160 255; --c-cobalt-bg: 19 38 74;
   --c-amber: 242 182 82; --c-amber-bg: 58 42 12;
   --c-resp: 245 158 91; --c-resp-bg: 58 34 15;
   --c-cont: 111 207 151; --c-cont-bg: 23 53 40;
   --c-sat: 217 139 234; --c-sat-bg: 53 22 61;
-  --c-slate: 159 176 168; --c-inverse: 233 239 234;
-  color-scheme: dark;
+  --c-slate: 160 170 188; --c-inverse: 237 242 244;
 }
 
 html, body, #app { height: 100%; margin: 0; }
 body {
-  font-family: 'DM Sans Variable', -apple-system, 'Segoe UI', Roboto, system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased; letter-spacing: -0.005em; font-size: 15px;
+  font-family: 'Inter Variable', -apple-system, 'Segoe UI', Roboto, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; letter-spacing: -0.006em; font-size: 14px;
   background: rgb(var(--c-surface)); color: rgb(var(--c-ink));
   overscroll-behavior: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
@@ -52,7 +50,7 @@ body {
 button { font: inherit; }
 button:disabled { opacity: .5; }
 :focus-visible { outline: 3px solid rgb(var(--c-brand) / .5); outline-offset: 2px; }
-.font-display { font-family: 'Fraunces Variable', Georgia, serif; font-variation-settings: 'SOFT' 50, 'WONK' 0; letter-spacing: -0.015em; }
+.font-display { font-family: 'Inter Variable', -apple-system, 'Segoe UI', Roboto, sans-serif; font-weight: 700; letter-spacing: -0.02em; }
 
 .leaflet-container { background: rgb(var(--c-surface-mid)); font-family: inherit; }
 /* Muted, slightly cool imagery so compartments and fire data read on top */
@@ -72,9 +70,9 @@ button:disabled { opacity: .5; }
 .me-cone { position: absolute; left: 50%; top: -9px; margin-left: -5px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid rgba(37,99,235,.7); transform-origin: 5px 23px; }
 @keyframes ping { 75%, 100% { transform: scale(1.6); opacity: 0; } }
 .callout { display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%); white-space: nowrap; cursor: pointer; }
-.callout-body { display: flex; align-items: center; gap: 6px; background: rgb(var(--c-card)); color: rgb(var(--c-ink)); padding: 6px 10px; border-radius: 9999px; box-shadow: 0 6px 18px rgba(20,33,29,.14); font: 600 12px/16px inherit; }
-.callout-body.big { border-radius: 12px; padding: 6px 10px 6px 6px; box-shadow: 0 6px 18px rgba(20,33,29,.14); }
-.callout-tip { width: 9px; height: 9px; background: rgb(var(--c-card)); transform: rotate(45deg); margin-top: -5px; box-shadow: 2px 2px 3px rgba(20,33,29,.06); }
+.callout-body { display: flex; align-items: center; gap: 6px; background: rgb(var(--c-card)); color: rgb(var(--c-ink)); padding: 6px 10px; border-radius: 9999px; box-shadow: 0 6px 18px rgba(43,45,66,.14); font: 600 12px/16px inherit; }
+.callout-body.big { border-radius: 12px; padding: 6px 10px 6px 6px; box-shadow: 0 6px 18px rgba(43,45,66,.14); }
+.callout-tip { width: 9px; height: 9px; background: rgb(var(--c-card)); transform: rotate(45deg); margin-top: -5px; box-shadow: 2px 2px 3px rgba(43,45,66,.06); }
 .callout-base { width: 8px; height: 8px; border-radius: 9999px; margin-top: 2px; border: 1.5px solid #fff; }
 .callout-ico { width: 22px; height: 22px; border-radius: 9999px; background: rgb(var(--c-sc)); display: flex; align-items: center; justify-content: center; }
 .callout-ico.sq { width: 34px; height: 34px; border-radius: 8px; }
@@ -96,16 +94,16 @@ button:disabled { opacity: .5; }
 @media (prefers-reduced-motion: reduce) { .sheet-enter, .fade-in, .pop-in, .screen-in { animation: none; } }
 
 /* compartment code labels (high zoom) */
-.leaflet-tooltip.comp-label { background: transparent; border: 0; box-shadow: none; padding: 0; color: #fff; font: 700 11px/1 inherit; letter-spacing: .02em; text-shadow: 0 0 3px rgba(20,33,29,.9), 0 0 6px rgba(20,33,29,.6); }
+.leaflet-tooltip.comp-label { background: transparent; border: 0; box-shadow: none; padding: 0; color: #fff; font: 700 11px/1 inherit; letter-spacing: .02em; text-shadow: 0 0 3px rgba(43,45,66,.9), 0 0 6px rgba(43,45,66,.6); }
 .leaflet-tooltip.comp-label::before { display: none; }
 /* live crew markers */
-.crew { position: relative; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9999px; background: #fff; box-shadow: 0 2px 8px rgba(20,33,29,.35); }
+.crew { position: relative; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9999px; background: #fff; box-shadow: 0 2px 8px rgba(43,45,66,.35); }
 .crew-in { width: 22px; height: 22px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: #fff; font: 700 9px/1 inherit; }
 .crew.stale { opacity: .55; filter: grayscale(.8); }
-.crew-tag { position: absolute; top: 31px; left: 50%; transform: translateX(-50%); white-space: nowrap; background: rgba(20,33,29,.85); color: #fff; font: 600 10px/1 inherit; padding: 3px 6px; border-radius: 6px; }
+.crew-tag { position: absolute; top: 31px; left: 50%; transform: translateX(-50%); white-space: nowrap; background: rgba(43,45,66,.85); color: #fff; font: 600 10px/1 inherit; padding: 3px 6px; border-radius: 6px; }
 /* iOS-style switch */
 .switch { position: relative; width: 44px; height: 26px; flex: none; border-radius: 9999px; background: rgb(var(--c-schh)); transition: background .18s; }
-.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 9999px; background: #fff; box-shadow: 0 1px 3px rgba(20,33,29,.3); transition: transform .18s; }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 9999px; background: #fff; box-shadow: 0 1px 3px rgba(43,45,66,.3); transition: transform .18s; }
 .switch[aria-checked='true'] { background: rgb(var(--c-brand)); }
 [data-theme='night'] .switch[aria-checked='true'] { background: rgb(var(--c-ok)); }
 .switch[aria-checked='true']::after { transform: translateX(18px); }

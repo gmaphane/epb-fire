@@ -1,4 +1,4 @@
-/** Design tokens: Calm Ember (see docs/03_DESIGN_LANGUAGE.md). Values live in src/styles.css as CSS vars. */
+/** Design tokens: Fire safety palette (see docs/03_DESIGN_LANGUAGE.md). Values live in src/styles.css as CSS vars. */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   darkMode: ['class', '[data-theme="night"]'],
@@ -48,15 +48,15 @@ export default {
         telemetry: { DEFAULT: '#0284C7', bg: '#F0F9FF' },
         forestry: { DEFAULT: '#16A34A', bg: '#F0FDF4' },
       },
-      fontFamily: { sans: ['"DM Sans Variable"', '-apple-system', 'Segoe UI', 'Roboto', 'system-ui', 'sans-serif'], display: ['"Fraunces Variable"', 'Georgia', 'serif'] },
+      fontFamily: { sans: ['"Inter Variable"', '-apple-system', 'Segoe UI', 'Roboto', 'system-ui', 'sans-serif'], display: ['"Inter Variable"', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'] },
       borderRadius: { card: '20px', sheet: '28px', pill: '9999px' },
       boxShadow: {
-        rail: '0 2px 10px rgba(20,33,29,.10)',
-        sheet: '0 -2px 24px rgba(20,33,29,.10), 0 12px 32px rgba(20,33,29,.08)',
-        capsule: '0 4px 18px rgba(20,33,29,.10)',
-        l1: '0 1px 2px rgba(20,33,29,.04), 0 6px 20px rgba(20,33,29,.05)',
-        l2: '0 2px 6px rgba(20,33,29,.06), 0 10px 28px rgba(20,33,29,.08)',
-        l3: '0 16px 40px rgba(20,33,29,.14)',
+        rail: '0 2px 10px rgba(43,45,66,.10)',
+        sheet: '0 -2px 24px rgba(43,45,66,.10), 0 12px 32px rgba(43,45,66,.08)',
+        capsule: '0 4px 18px rgba(43,45,66,.10)',
+        l1: '0 1px 2px rgba(43,45,66,.04), 0 6px 20px rgba(43,45,66,.05)',
+        l2: '0 2px 6px rgba(43,45,66,.06), 0 10px 28px rgba(43,45,66,.08)',
+        l3: '0 16px 40px rgba(43,45,66,.14)',
       },
       spacing: { nav: '64px' },
     },

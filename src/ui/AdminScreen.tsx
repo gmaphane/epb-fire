@@ -48,7 +48,7 @@ export function AdminScreen() {
       <Card testid="export-card">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0">
-            <div class="font-display text-[19px]">Fire spreadsheet</div>
+            <div class="font-display text-[16px]">Fire spreadsheet</div>
             <div class="text-[13px] text-muted">{incidents.filter((i) => !i.deleted_at).length} fires · Excel</div>
           </div>
           <Button kind="primary" class="shrink-0" testid="export-xlsx" icon={<Download size={17} />} onClick={() => { downloadBlob(`EPB_fire_incidents_${new Date().toISOString().slice(0, 10)}.xlsx`, incidentsWorkbook()); toast('Spreadsheet downloaded'); }}>Download</Button>
@@ -57,7 +57,7 @@ export function AdminScreen() {
 
 
       <div class="flex items-center justify-between px-1">
-        <h2 class="font-display text-[20px] flex items-center gap-2">Users <span class="font-sans text-[14px] text-muted">{users ? users.length : ''}</span></h2>
+        <h2 class="font-display text-[18px] flex items-center gap-2">Users <span class="font-sans text-[14px] text-muted">{users ? users.length : ''}</span></h2>
         <Button kind="secondary" class="!min-h-[40px] !px-4 !text-[14px]" testid="add-user" icon={<Plus size={16} />} onClick={() => setEdit('new')}>Add</Button>
       </div>
       {err && <Banner tone="err">{err}</Banner>}
@@ -100,14 +100,14 @@ function UserSheet({ user, crews, meId, onClose, onDone, onChanged }: { user: Us
       <div class="w-full max-w-md bg-card rounded-t-sheet sm:rounded-sheet px-5 pt-2 pb-6 pb-safe space-y-4 sheet-enter max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()} data-testid="user-sheet">
         <div class="w-9 h-1 bg-schh rounded-full mx-auto" />
         <div class="flex items-center justify-between">
-          <h2 class="font-display text-[22px]">{secret ? '' : user ? 'Edit user' : 'Add user'}</h2>
+          <h2 class="font-display text-[20px]">{secret ? '' : user ? 'Edit user' : 'Add user'}</h2>
           <button aria-label="Close" class="press w-9 h-9 -mr-1 rounded-full flex items-center justify-center text-muted" onClick={secret ? onDone : onClose}><X size={20} /></button>
         </div>
         {secret ? (
           <div class="space-y-4 text-center pt-2 pb-1 fade-in" data-testid="temp-password">
             <div class="w-16 h-16 rounded-full bg-moss text-on-moss mx-auto flex items-center justify-center pop-in"><Check size={30} strokeWidth={2.5} /></div>
             <div>
-              <div class="font-display text-[22px]">{secret.isNew ? `${secret.name} added` : 'New password set'}</div>
+              <div class="font-display text-[20px]">{secret.isNew ? `${secret.name} added` : 'New password set'}</div>
               <div class="text-[14px] text-muted mt-1">Give them this temporary password. It's shown only once.</div>
             </div>
             <div class="rounded-[20px] bg-surface-low border border-line p-4 text-left space-y-2">

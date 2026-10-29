@@ -29,17 +29,17 @@ const LAYERS: { k: string; label: string; swatch: string }[] = [
   { k: 'firebreak', label: 'Firebreaks', swatch: 'dash:#F8FAFC' },
   { k: 'water', label: 'Water points', swatch: 'dot:#2563EB' },
   { k: 'camp', label: 'Camps', swatch: 'dot:#334155' },
-  { k: 'standby_post', label: 'Standby posts', swatch: 'dot:#133C34' },
+  { k: 'standby_post', label: 'Standby posts', swatch: 'dot:#2B2D42' },
   { k: 'crews', label: 'Crews (live)', swatch: 'ring:#2563EB' },
   { k: 'detections', label: 'Satellite hotspots', swatch: 'diamond:#C026D3' },
 ];
 
 function Swatch({ s }: { s: string }) {
   if (s === 'risk')
-    return <span class="flex gap-[2px]">{Object.values(RISK).map((r) => <span key={r.c} class="w-1.5 h-4 rounded-[2px]" style={{ background: r.c, boxShadow: 'inset 0 0 0 1px rgba(20,33,29,.35)' }} />)}</span>;
+    return <span class="flex gap-[2px]">{Object.values(RISK).map((r) => <span key={r.c} class="w-1.5 h-4 rounded-[2px]" style={{ background: r.c, boxShadow: 'inset 0 0 0 1px rgba(43,45,66,.35)' }} />)}</span>;
   const [kind, c] = s.split(':');
-  if (kind === 'line') return <span class="w-5 h-[4px] rounded-full" style={{ background: c, boxShadow: '0 0 0 1.5px #133C34' }} />;
-  if (kind === 'dash') return <span class="w-5 h-[3px]" style={{ backgroundImage: `repeating-linear-gradient(90deg, ${c} 0 4px, transparent 4px 7px)`, boxShadow: '0 0 0 1.5px #133C34' }} />;
+  if (kind === 'line') return <span class="w-5 h-[4px] rounded-full" style={{ background: c, boxShadow: '0 0 0 1.5px #2B2D42' }} />;
+  if (kind === 'dash') return <span class="w-5 h-[3px]" style={{ backgroundImage: `repeating-linear-gradient(90deg, ${c} 0 4px, transparent 4px 7px)`, boxShadow: '0 0 0 1.5px #2B2D42' }} />;
   if (kind === 'diamond') return <span class="w-3 h-3 rotate-45 rounded-[2px]" style={{ background: c }} />;
   if (kind === 'ring') return <span class="w-3.5 h-3.5 rounded-full border-[3px] bg-white" style={{ borderColor: c }} />;
   return <span class="w-3.5 h-3.5 rounded-full" style={{ background: c }} />;
@@ -107,14 +107,14 @@ export function MapScreen() {
     if (moving) {
       // move-pin mode: the next tap chooses the new position (confirmed in the banner)
       c.onClick((lat, lon) => { c.map.closePopup(); setMoveTo([lat, lon]); });
-      if (moveTo) L.circleMarker(moveTo, { radius: 10, color: '#fff', weight: 3, fillColor: '#E2483D', fillOpacity: 1 }).addTo(grp);
+      if (moveTo) L.circleMarker(moveTo, { radius: 10, color: '#fff', weight: 3, fillColor: '#EF233C', fillOpacity: 1 }).addTo(grp);
       return;
     }
     if (measure === null) { c.onClick(() => { closeAll(); setPanel(false); }); return; }
     c.onClick((lat, lon) => { c.map.closePopup(); setMeasure((m) => [...(m ?? []), [lat, lon]]); });
     if (measure.length) {
-      L.polyline(measure, { color: '#133C34', weight: 3, dashArray: '6 4' }).addTo(grp);
-      measure.forEach((p) => L.circleMarker(p, { radius: 4, color: '#fff', weight: 2, fillColor: '#133C34', fillOpacity: 1 }).addTo(grp));
+      L.polyline(measure, { color: '#2B2D42', weight: 3, dashArray: '6 4' }).addTo(grp);
+      measure.forEach((p) => L.circleMarker(p, { radius: 4, color: '#fff', weight: 2, fillColor: '#2B2D42', fillOpacity: 1 }).addTo(grp));
     }
   }, [measure, moving, moveTo]);
   const measureM = measure ? measure.reduce((t, p, i) => (i ? t + haversineM(measure[i - 1][0], measure[i - 1][1], p[0], p[1]) : 0), 0) : 0;
@@ -187,7 +187,7 @@ export function MapScreen() {
         {/* Top: one search field (CalmRoutes style) */}
         <div class="absolute left-3 right-3 z-[1000] flex items-center gap-2" style={top(10)}>
           <div class="flex-1 min-w-0 h-[52px] bg-card rounded-pill shadow-capsule flex items-center pl-1.5 pr-2 gap-2">
-            <button aria-label="Status and info" data-testid="appbar-info" onClick={() => setState({ overlay: 'info' })} class="press w-10 h-10 rounded-full bg-brand flex items-center justify-center shrink-0"><Flame size={18} class="text-[#F0675C]" fill="#F0675C" /></button>
+            <button aria-label="Status and info" data-testid="appbar-info" onClick={() => setState({ overlay: 'info' })} class="press w-10 h-10 rounded-full bg-brand flex items-center justify-center shrink-0"><Flame size={18} class="text-[#FF6375]" fill="#FF6375" /></button>
             <button aria-label="Search" data-testid="appbar-search" onClick={() => setState({ overlay: 'search' })} class="flex-1 min-w-0 flex flex-col items-start text-left leading-tight">
               <span class="text-[15px] font-semibold truncate max-w-full">{CONFIG.appName}</span>
               <span class="text-[12px] text-muted num truncate max-w-full" data-testid="capsule-coords">
@@ -262,7 +262,7 @@ export function MapScreen() {
             <Sheet testid="hazard-sheet" class="px-5 pb-5 space-y-4" onDown={() => setSelHaz(null)}>
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <h2 class="font-display text-[22px] leading-tight">{HAZARD_LABEL[haz.kind] ?? 'Hazard'}</h2>
+                  <h2 class="font-display text-[20px] leading-tight">{HAZARD_LABEL[haz.kind] ?? 'Hazard'}</h2>
                   <p class="text-[14px] text-muted mt-1">{haz.note ? `${haz.note} · ` : ''}{ago(haz.created_at)}{here ? ` · ${fmtDistance(haversineM(here.lat, here.lon, haz.lat, haz.lon))} away` : ''}</p>
                 </div>
                 <button aria-label="Close" class="press w-9 h-9 -mr-1 rounded-full flex items-center justify-center text-muted shrink-0" onClick={() => setSelHaz(null)}><X size={20} /></button>
@@ -275,7 +275,7 @@ export function MapScreen() {
             <Sheet class="px-5 pb-5 space-y-4" onDown={() => setSelDet(null)}>
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <h2 class="font-display text-[22px] leading-tight">Satellite hotspot</h2>
+                  <h2 class="font-display text-[20px] leading-tight">Satellite hotspot</h2>
                   <p class="text-[14px] text-muted mt-1">{det.compartment ? (det.distance_m != null && det.distance_m < 1 ? `Inside ${det.compartment}` : `${fmtDistance(det.distance_m ?? 0)} from ${det.compartment}`) : 'Outside the estate'} · {ago(det.acq_time)}{here ? ` · ${fmtDistance(haversineM(here.lat, here.lon, det.lat, det.lon))} away` : ''}</p>
                 </div>
                 <button aria-label="Close" class="press w-9 h-9 -mr-1 rounded-full flex items-center justify-center text-muted shrink-0" onClick={() => setSelDet(null)}><X size={20} /></button>
@@ -286,7 +286,7 @@ export function MapScreen() {
           ) : sheet === 'list' && active.length ? (
             <Sheet testid="incident-list" class="pb-4" onDown={() => setSheet('closed')} onHandle={() => setSheet('closed')}>
               <button class="w-full flex items-center justify-between px-5 pt-1 pb-3" onClick={() => setSheet('closed')}>
-                <span class="font-display text-[22px]" data-testid="active-count">{active.length} active fire{active.length > 1 ? 's' : ''}</span>
+                <span class="font-display text-[20px]" data-testid="active-count">{active.length} active fire{active.length > 1 ? 's' : ''}</span>
                 <ChevronDown size={22} class="text-muted" />
               </button>
               <div class="max-h-[40vh] overflow-y-auto px-2">
@@ -424,7 +424,7 @@ const HAZARD_LABEL: Record<string, string> = { road_blocked: 'Road blocked', tre
 
 export const DANGER_LABEL: Record<string, string> = { low: 'Low', moderate: 'Moderate', high: 'High', very_high: 'Very high', extreme: 'Extreme' };
 export const DANGER_STYLE: Record<string, string> = {
-  low: 'bg-moss text-on-moss', moderate: 'bg-amber-bg text-amber', high: 'bg-[#E9822F] text-white', very_high: 'bg-fire text-on-fire', extreme: 'bg-[#8E2219] text-white',
+  low: 'bg-moss text-on-moss', moderate: 'bg-amber-bg text-amber', high: 'bg-[#E9822F] text-white', very_high: 'bg-fire text-on-fire', extreme: 'bg-[#A6031F] text-white',
 };
 const DANGER_ACTION: Record<string, string> = {
   low: 'Normal patrols.',
@@ -494,7 +494,7 @@ function Conditions({ rows, wx }: { rows: FireDanger[]; wx: Weather | null }) {
       </button>
       {open && (
         <div class="bg-card rounded-[22px] shadow-l3 p-4 w-[284px] text-[13px] space-y-2 pop-in origin-top-left" data-testid="danger-detail">
-          {d && <div class="font-display text-[19px] leading-snug">{DANGER_LABEL[d.level]} fire danger{d.id !== today ? ' (yesterday)' : ''}</div>}
+          {d && <div class="font-display text-[16px] leading-snug">{DANGER_LABEL[d.level]} fire danger{d.id !== today ? ' (yesterday)' : ''}</div>}
           {d && <div class="text-[14px]">{DANGER_ACTION[d.level]}</div>}
           {wx && <div class="text-muted num">Now: wind {compass8(wx.windFrom)} {Math.round(wx.windKmh)} km/h{wx.gustKmh != null ? `, gusts ${Math.round(wx.gustKmh)}` : ''} · {Math.round(wx.tempC)}°C · humidity <span class={wx.rh < 30 ? 'text-fire-dark font-semibold' : ''}>{Math.round(wx.rh)}%</span>{age > 60 ? ` · reading ${age >= 120 ? `${Math.round(age / 60)} h` : `${age} min`} old` : ''}</div>}
           {d && <div class="text-muted num">Today max {d.temp_max_c != null ? Math.round(d.temp_max_c) : '—'}°C, min humidity {d.rh_min_pct ?? '—'}%, wind up to {d.wind_max_kmh ?? '—'} km/h{d.days_since_rain != null ? ` · ${d.days_since_rain === 0 ? 'rain yesterday' : `no rain for ${d.days_since_rain >= 14 ? '14+' : d.days_since_rain} days`}` : ''}</div>}
@@ -515,7 +515,7 @@ export function DeleteSheet({ id, onClose, onDone }: { id: string; onClose: () =
       <div class="w-full bg-card rounded-t-sheet px-5 pt-2 pb-6 pb-safe space-y-4 sheet-enter" onClick={(e) => e.stopPropagation()} data-testid="delete-sheet">
         <div class="w-9 h-1 bg-schh rounded-full mx-auto" />
         <div>
-          <h2 class="font-display text-[22px]">Delete this report?</h2>
+          <h2 class="font-display text-[20px]">Delete this report?</h2>
           <p class="text-[14px] text-muted mt-1">It's removed from maps and lists. Kept for audit with your reason.</p>
         </div>
         <div class="flex flex-wrap gap-2">{REASONS.map((r) => <Choice key={r} selected={reason === r} onClick={() => setReason(r)}>{r}</Choice>)}</div>

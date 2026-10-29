@@ -51,7 +51,7 @@ function AlarmBanner() {
         <div class="flex items-center gap-3">
           <span class="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center pulse shrink-0"><BellRing size={22} /></span>
           <div class="min-w-0">
-            <div class="font-display text-[20px] leading-tight truncate">Fire call-out — {crews.find((c) => c.id === a.crew_id)?.name ?? 'You'}</div>
+            <div class="font-display text-[18px] leading-tight truncate">Fire call-out — {crews.find((c) => c.id === a.crew_id)?.name ?? 'You'}</div>
             <div class="text-[14px] opacity-90 truncate">{inc?.compartment ?? inc?.block ?? 'See map'} · {ago(a.dispatched_at)}{a.instruction ? ` · ${a.instruction}` : ''}</div>
           </div>
         </div>
@@ -176,7 +176,7 @@ function InfoOverlay() {
     <div class="fixed inset-0 z-[2500] bg-black/30 flex items-end" onClick={close} data-testid="info-overlay">
       <div class="w-full bg-card rounded-t-sheet shadow-sheet px-5 pt-2 pb-8 pb-safe space-y-4 sheet-enter max-h-[88vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div class="w-9 h-1 bg-schh rounded-full mx-auto" />
-        <div class="flex items-center justify-between"><h2 class="font-display text-[22px]">My position</h2><div class="flex gap-2 items-center"><GpsChip g={g} compact /><SyncChip s={s.sync} onClick={() => { close(); go('sync'); }} /></div></div>
+        <div class="flex items-center justify-between"><h2 class="font-display text-[20px]">My position</h2><div class="flex gap-2 items-center"><GpsChip g={g} compact /><SyncChip s={s.sync} onClick={() => { close(); go('sync'); }} /></div></div>
         {g.fix ? (() => { const u = toUtm30(g.fix!.lat, g.fix!.lon); return (
           <button class="press w-full text-left space-y-1" data-testid="readout" onClick={() => { void navigator.clipboard?.writeText(`${g.fix!.lat.toFixed(5)}, ${g.fix!.lon.toFixed(5)}`); }}>
             <div class="text-[26px] font-semibold num tracking-[-.02em] leading-8">{fmtDms(g.fix.lat, 'lat')}  {fmtDms(g.fix.lon, 'lon')}</div>
@@ -276,7 +276,7 @@ export function App() {
               return (
                 <a key={t.id} href={'#/' + t.id} data-testid={'tab-' + t.id} aria-current={active ? 'page' : undefined}
                   class={cx('press relative flex flex-col items-center justify-center gap-1 min-w-[64px] min-h-[48px] text-[12px] transition-colors', active ? 'text-ink font-semibold' : 'text-faint font-medium')}>
-                  <span class={cx('flex items-center justify-center h-8 w-14 rounded-pill transition-colors', active && 'bg-moss text-on-moss')}><Icon size={21} strokeWidth={active ? 2.2 : 1.8} /></span>
+                  <span class={cx('flex items-center justify-center h-8 w-14 rounded-pill transition-colors', active && 'bg-fire-bg text-fire-dark')}><Icon size={21} strokeWidth={active ? 2.2 : 1.8} /></span>
                   {t.label}
                   {badge && <span class={cx('absolute top-0.5 right-3 w-2 h-2 rounded-full', sync!.errors ? 'bg-fire' : 'bg-amber')} />}
                 </a>
