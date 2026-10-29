@@ -250,8 +250,8 @@ test('navigate: Stop ends en route; a hazard added by mistake can be removed', a
   await expect(page.getByTestId('nav-stop')).toBeVisible();
   // add a hazard (the mistake)
   await page.getByTestId('nav-more').click();
-  await page.getByRole('button', { name: 'Road hazard' }).click();
-  await page.getByRole('button', { name: 'Tree down' }).click();
+  await page.getByTestId('nav-details').getByRole('button', { name: 'Road hazard' }).click();
+  await page.getByTestId('nav-details').getByRole('button', { name: 'Tree down' }).click();
   await page.getByTestId('nav-stop').click();
   await expect(page.getByTestId('nav-stop')).toHaveCount(0);
   await page.goto('/#/navigate');
@@ -261,8 +261,11 @@ test('navigate: Stop ends en route; a hazard added by mistake can be removed', a
   await page.goto('/#/map');
   const marker = page.locator('.leaflet-marker-icon[title="Road hazard"]');
   await expect(marker).toHaveCount(1);
-  await marker.dispatchEvent('click');
-  await expect(page.getByTestId('hazard-sheet')).toBeVisible();
+  // the marker is redrawn when the hazard syncs; retry the tap if it landed on the old one
+  await expect(async () => {
+    await marker.dispatchEvent('click');
+    await expect(page.getByTestId('hazard-sheet')).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
   await page.getByTestId('hazard-remove').click();
   await expect(marker).toHaveCount(0);
 });
@@ -275,4 +278,24 @@ test('welcome tour can be reopened from Settings and walks through 4 steps', asy
   await shot(page, '12-tour-last');
   await page.getByTestId('tour-done').click();
   await expect(page.getByTestId('tour')).toHaveCount(0);
+});
+
+test('fire details and map card show compartments at risk: distance, direction, wind, time to reach', async () => {
+  await page.goto('/#/report');
+  // place the fire by tapping the map (no dependence on the browser's GPS)
+  const box = (await page.getByTestId('report-map').boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.8, box.y + box.height * 0.8);
+  await expect(page.getByTestId('loc-map')).toHaveAttribute('aria-selected', 'true');
+  await page.getByTestId('src-community').click();
+  const dup = page.getByRole('button', { name: 'Report anyway' }); // near an earlier test fire
+  if (await dup.isVisible()) await dup.click();
+  await page.getByTestId('submit-report').click();
+  await expect(page.getByTestId('inc-coords')).toBeVisible();
+  const panel = page.getByTestId('spread-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel.getByTestId('spread-wind')).toBeVisible();
+  await expect(panel.getByTestId('threat-row').first()).toContainText(/(\d+ m|km) [NESW]{1,3} of the fire|Fire is inside/);
+  await expect(panel.getByTestId('threat-row').first()).toContainText(/Now|min|h/);
+  console.log('risk rows:', await panel.getByTestId('threat-row').count(), '|', (await panel.getByTestId('threat-row').first().innerText()).replace(/\n/g, ' '));
+  await shot(page, '13-spread-details');
 });

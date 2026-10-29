@@ -6,7 +6,7 @@ import { gps } from '../core/gps';
 import { CONFIG } from '../config';
 import { MapController, RISK, type RouteLine } from './mapview';
 import { Button, Choice, CoordReadout, NorthDial, RailButton, SatChip, Sheet, StatusChip, SyncChip, cx } from './kit';
-import { cardinal, fmtDistance, haversineM, toUtm30 } from '../core/geo';
+import { fmtDistance, haversineM, toUtm30 } from '../core/geo';
 import { deleteIncident, moveIncident, resolveHazard } from '../core/actions';
 import { ago } from '../core/time';
 import { go, useGpsFix } from './hooks';
@@ -16,7 +16,8 @@ import { fmtEta, route, type Mode, type Route } from '../core/route';
 import { isStale, setPresence, stopResponding } from '../core/presence';
 import type { Incident } from '../core/types';
 import { compass8, useWeather, wxAge, type Weather } from '../core/weather';
-import { spreadEllipse, threats, THREAT_LABEL, type Threat } from '../core/spread';
+import { spreadEllipse, threats, type Threat } from '../core/spread';
+import { SpreadPanel, WindArrow } from './SpreadPanel';
 import { enablePush, pushState, type PushState } from '../core/push';
 import { promptInstall, useInstall } from '../core/install';
 import type { FireDanger } from '../core/types';
@@ -418,50 +419,8 @@ function CoordLine({ lat, lon }: { lat: number; lon: number }) {
   );
 }
 
-const WindArrow = ({ from, size = 16 }: { from: number; size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" style={{ transform: `rotate(${(from + 180) % 360}deg)` }} aria-label={`Wind from ${Math.round(from)}°`}>
-    <path d="M12 21V5" stroke="#2563EB" stroke-width="2.6" stroke-linecap="round" />
-    <path d="M6 10l6-7 6 7" fill="none" stroke="#2563EB" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
-  </svg>
-);
 
-const LEVEL_STYLE: Record<string, string> = { burning: 'bg-fire text-on-fire', very_high: 'bg-fire-bg text-on-fire-bg', high: 'bg-fire-bg text-on-fire-bg', moderate: 'bg-amber-bg text-amber', low: 'bg-sc text-muted' };
-const fmtMin = (m: number) => (m < 1 ? 'now' : m < 60 ? `~${Math.round(m)} min` : m < 600 ? `~${(m / 60).toFixed(1)} h` : '>10 h');
-
-/** Which compartments the fire could reach first if the wind holds. One summary line; tap for the list. */
-function SpreadPanel({ wx, th }: { wx: Weather | null; th: Threat[] }) {
-  const [openList, setOpenList] = useState(false);
-  const list = th.filter((t) => t.level !== 'low');
-  if (!list.length) return null;
-  const first = list.find((t) => t.level !== 'burning') ?? list[0];
-  return (
-    <div class="border-t border-line pt-1" data-testid="spread-panel">
-      <button class="press w-full flex items-center gap-2.5 py-2.5 text-left" onClick={() => setOpenList((v) => !v)} data-testid="spread-summary">
-        <span class={cx('px-2 py-0.5 rounded-pill text-[11px] font-semibold shrink-0', LEVEL_STYLE[first.level])}>{THREAT_LABEL[first.level]}</span>
-        <span class="flex-1 min-w-0 text-[14px] truncate">
-          <b>{first.code}</b>{first.young ? ' (young)' : ''} {first.level === 'burning' ? 'is burning' : `in ${fmtMin(first.etaMin!)}`}
-          {list.length > 1 && <span class="text-muted"> · +{list.length - 1} more</span>}
-        </span>
-        {wx && <span class="flex items-center gap-1 text-[13px] text-muted num shrink-0"><WindArrow from={wx.windFrom} size={14} />{Math.round(wx.windKmh)}</span>}
-        <ChevronDown size={18} class={cx('text-muted shrink-0 transition-transform duration-200', openList && 'rotate-180')} />
-      </button>
-      {openList && (
-        <div class="pb-1 divide-y divide-line fade-in">
-          {list.map((t) => (
-            <div key={t.id} class="py-2 flex items-center gap-2" data-testid="threat-row">
-              <span class="text-[15px] font-semibold min-w-[52px] whitespace-nowrap shrink-0">{t.code}</span>
-              <span class="flex-1 min-w-0 text-[13px] text-muted truncate">{t.level === 'burning' ? 'fire inside' : `${fmtDistanceShort(t.distM)} ${cardinal(t.bearing)}${t.downwind ? ' · downwind' : ''}`}{t.yop != null ? ` · ${t.young ? 'young' : 'bamboo'} ${t.yop}` : ''}</span>
-              <span class="text-[14px] font-semibold num shrink-0">{t.level === 'burning' ? 'Now' : fmtMin(t.etaMin!)}</span>
-            </div>
-          ))}
-          <div class="pt-2 text-[12px] text-faint">If the wind{wx ? ` (${compass8(wx.windFrom)} ${Math.round(wx.windKmh)} km/h)` : ''} holds. A rough guide.</div>
-        </div>
-      )}
-    </div>
-  );
-}
 const HAZARD_LABEL: Record<string, string> = { road_blocked: 'Road blocked', tree_down: 'Tree down', bridge: 'Bridge unsafe', other: 'Hazard' };
-const fmtDistanceShort = (m: number) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`);
 
 export const DANGER_LABEL: Record<string, string> = { low: 'Low', moderate: 'Moderate', high: 'High', very_high: 'Very high', extreme: 'Extreme' };
 export const DANGER_STYLE: Record<string, string> = {

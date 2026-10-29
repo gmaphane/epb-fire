@@ -1,15 +1,18 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { Camera, Navigation, Route as RouteIcon, Send, UserPlus } from 'lucide-preact';
 import { addNote, addPhoto, assignmentAction, photoBlob, setStatus } from '../core/actions';
 import { getState, toast, useStore } from '../core/store';
 import { ago, hhmm } from '../core/time';
 import { fmtDms, fmtHa, fmtUtm } from '../core/geo';
-import { ACTIVE, allowedNext, CAUSES, can, STATUS_LABEL } from '../core/flow';
+import { ACTIVE, allowedNext, CAUSES, can, isOpen, STATUS_LABEL } from '../core/flow';
 import { DeleteSheet } from './MapScreen';
 import { Banner, Button, Choice, CoordReadout, Metric, RowSyncDot, Screen, StatusChip, cx } from './kit';
 import { back, go, useNow } from './hooks';
 import { CONFIG } from '../config';
 import type { Assignment, IncidentStatus } from '../core/types';
+import { useWeather } from '../core/weather';
+import { threats } from '../core/spread';
+import { SpreadPanel } from './SpreadPanel';
 
 function Thumb({ id, uploaded }: { id: string; uploaded: boolean }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -34,6 +37,9 @@ export function IncidentScreen({ id }: { id: string }) {
   const role = s.me?.role;
   const [del, setDel] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  // wind at the fire and the compartments it could reach (same as the map card)
+  const wx = useWeather(inc?.lat, inc?.lon);
+  const th = useMemo(() => (inc ? threats(inc, s.compartments, wx ? { kmh: wx.windKmh, from: wx.windFrom } : null) : []), [inc?.lat, inc?.lon, s.compartments, wx?.fetched]);
 
   if (!inc) return <Screen title="Incident" back={back}><Banner tone="warn">This incident is not on this phone yet.</Banner></Screen>;
   const events = s.events.filter((e) => e.incident_id === id).sort((a, b) => (a.client_ts < b.client_ts ? 1 : -1));
@@ -84,6 +90,8 @@ export function IncidentScreen({ id }: { id: string }) {
           <input ref={file} type="file" accept="image/*" capture="environment" class="hidden" onChange={async (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) { await addPhoto(id, f); toast('Photo saved'); } }} />
         </div>
       </div>
+
+      {isOpen(inc.status) && !inc.deleted_at && <div class="px-1"><SpreadPanel wx={wx} th={th} /></div>}
 
       {inc.notes && (
         <section class="px-1">
