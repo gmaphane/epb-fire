@@ -172,6 +172,7 @@ export interface Detection {
   promoted_incident_id: string | null;
   compartment?: string | null; // nearest compartment (server-computed)
   distance_m?: number | null; // 0 = inside
+  block?: string | null; // block of the nearest compartment (server-computed)
   notified_at?: string | null;
   client_updated_at: string;
   updated_at?: string;
@@ -256,12 +257,19 @@ export interface CrewPosition extends Local {
   updated_at?: string;
 }
 
-/** Daily fire danger rating (server-computed every morning). id = YYYY-MM-DD. */
+/** Daily fire danger rating per block (server-computed 05:45, updated 11:45). */
 export type DangerLevel = 'low' | 'moderate' | 'high' | 'very_high' | 'extreme';
 export interface FireDanger {
-  id: string;
+  id: string; // YYYY-MM-DD (estate = worst block) or YYYY-MM-DD|A (one block)
   day: string;
+  block?: string | null; // 'Block A' … ; null/absent = estate row
   level: DangerLevel;
+  fwi?: number | null; // Canadian Fire Weather Index and its fuel moisture codes
+  ffmc?: number | null;
+  dmc?: number | null;
+  dc?: number | null;
+  isi?: number | null;
+  bui?: number | null;
   ffwi: number | null;
   temp_max_c: number | null;
   rh_min_pct: number | null;

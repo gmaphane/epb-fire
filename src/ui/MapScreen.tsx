@@ -478,27 +478,45 @@ function InstallNudge() {
   );
 }
 
-/** One chip for conditions: today's fire danger + current wind and temperature. Tap for details. */
+/** One chip for conditions: today's fire danger (worst block) + current wind and temperature. Tap for each block. */
+const RANK: Record<string, number> = { low: 0, moderate: 1, high: 2, very_high: 3, extreme: 4 };
 function Conditions({ rows, wx }: { rows: FireDanger[]; wx: Weather | null }) {
   const [open, setOpen] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
   const yest = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
-  const d = rows.find((r) => r.id === today) ?? rows.find((r) => r.id === yest);
+  const day = rows.some((r) => r.day === today) ? today : rows.some((r) => r.day === yest) ? yest : null;
+  const blocks = day ? rows.filter((r) => r.day === day && r.block).sort((a, b) => String(a.block).localeCompare(String(b.block))) : [];
+  const d = day ? (rows.find((r) => r.id === day) ?? blocks.reduce<FireDanger | undefined>((a, c) => (!a || RANK[c.level] > RANK[a.level] ? c : a), undefined)) : undefined;
   if (!d && !wx) return null;
   const age = wx ? wxAge(wx) : 0;
+  const top = d ? blocks.filter((b) => b.level === d.level).map((b) => String(b.block).replace('Block ', '')) : [];
+  const mixed = blocks.length > 1 && top.length < blocks.length;
   return (
     <div class="pointer-events-auto flex flex-col items-start gap-1.5">
       <button data-testid="conditions" onClick={() => setOpen((v) => !v)} class="press h-9 rounded-pill shadow-capsule flex items-stretch overflow-hidden text-[13px] font-semibold num bg-card">
-        {d && <span data-testid="danger-pill" class={cx('pl-2.5 pr-3 flex items-center gap-1.5', DANGER_STYLE[d.level])}><Flame size={13} fill="currentColor" />{DANGER_LABEL[d.level].toUpperCase()}</span>}
+        {d && <span data-testid="danger-pill" class={cx('pl-2.5 pr-3 flex items-center gap-1.5', DANGER_STYLE[d.level])}><Flame size={13} fill="currentColor" />{DANGER_LABEL[d.level].toUpperCase()}{mixed ? ` · ${top.join(', ')}` : ''}</span>}
         {wx && <span data-testid="wx-chip" class="px-3 flex items-center gap-1.5"><WindArrow from={wx.windFrom} size={15} />{compass8(wx.windFrom)} {Math.round(wx.windKmh)} km/h<span class="text-muted font-medium">· {Math.round(wx.tempC)}°</span>{age > 60 && <span class="text-amber font-medium">· old</span>}</span>}
       </button>
       {open && (
-        <div class="bg-card rounded-[22px] shadow-l3 p-4 w-[284px] text-[13px] space-y-2 pop-in origin-top-left" data-testid="danger-detail">
-          {d && <div class="font-display text-[16px] leading-snug">{DANGER_LABEL[d.level]} fire danger{d.id !== today ? ' (yesterday)' : ''}</div>}
+        <div class="bg-card rounded-[22px] shadow-l3 p-4 w-[300px] text-[13px] space-y-2 pop-in origin-top-left" data-testid="danger-detail">
+          {d && <div class="font-display text-[16px] leading-snug">{DANGER_LABEL[d.level]} fire danger{mixed ? ` in Block ${top.join(', ')}` : ''}{day !== today ? ' (yesterday)' : ''}</div>}
           {d && <div class="text-[14px]">{DANGER_ACTION[d.level]}</div>}
+          {blocks.length > 0 && (
+            <div class="divide-y divide-line" data-testid="danger-blocks">
+              {blocks.map((b) => (
+                <div key={b.id} class="py-1.5" data-testid="danger-block">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="font-semibold">{b.block}</span>
+                    <span class={cx('px-1.5 py-0.5 rounded-md text-[11px] font-semibold', DANGER_STYLE[b.level])}>{DANGER_LABEL[b.level].toUpperCase()}{b.fwi != null ? ` · FWI ${Math.round(b.fwi)}` : ''}</span>
+                  </div>
+                  <div class="text-muted num">Max {b.temp_max_c != null ? Math.round(b.temp_max_c) : '—'}°C · humidity {b.rh_min_pct ?? '—'}% · wind {b.wind_max_kmh ?? '—'} km/h{b.days_since_rain != null ? ` · ${b.days_since_rain === 0 ? 'rain yesterday' : `no rain ${b.days_since_rain >= 60 ? '60+' : b.days_since_rain} d`}` : ''}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!blocks.length && d && <div class="text-muted num">Today max {d.temp_max_c != null ? Math.round(d.temp_max_c) : '—'}°C, min humidity {d.rh_min_pct ?? '—'}%, wind up to {d.wind_max_kmh ?? '—'} km/h{d.days_since_rain != null ? ` · ${d.days_since_rain === 0 ? 'rain yesterday' : `no rain for ${d.days_since_rain >= 14 ? '14+' : d.days_since_rain} days`}` : ''}</div>}
           {wx && <div class="text-muted num">Now: wind {compass8(wx.windFrom)} {Math.round(wx.windKmh)} km/h{wx.gustKmh != null ? `, gusts ${Math.round(wx.gustKmh)}` : ''} · {Math.round(wx.tempC)}°C · humidity <span class={wx.rh < 30 ? 'text-fire-dark font-semibold' : ''}>{Math.round(wx.rh)}%</span>{age > 60 ? ` · reading ${age >= 120 ? `${Math.round(age / 60)} h` : `${age} min`} old` : ''}</div>}
-          {d && <div class="text-muted num">Today max {d.temp_max_c != null ? Math.round(d.temp_max_c) : '—'}°C, min humidity {d.rh_min_pct ?? '—'}%, wind up to {d.wind_max_kmh ?? '—'} km/h{d.days_since_rain != null ? ` · ${d.days_since_rain === 0 ? 'rain yesterday' : `no rain for ${d.days_since_rain >= 14 ? '14+' : d.days_since_rain} days`}` : ''}</div>}
-
+          {blocks.length > 0 && <div class="text-[12px] text-faint leading-snug">Canadian Fire Weather Index for each block, from 60 days of weather and rain. Updated 05:45 and 11:45.</div>}
         </div>
       )}
     </div>

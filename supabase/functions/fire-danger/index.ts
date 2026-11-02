@@ -1,12 +1,21 @@
-// Daily fire danger rating for the estate, every morning at 05:45 (Ghana = UTC), pushed to everyone.
+// Fire danger rating per block (A, B, C), every morning at 05:45 and again at 11:45 (Ghana = UTC).
 //
-// Rating = Fosberg Fire Weather Index (temperature, humidity, wind) at today's afternoon peak (10:00–17:00),
-// then one level up after 7+ days without rain (≥2 mm), one level down after ≥5 mm in the last 24 h.
-// Provisional thresholds: tune against the estate's fire history.
+// Rating = Canadian Fire Weather Index (FWI) for each block's own location: the fuel moisture codes are run over the
+// last 60 days of noon weather and rain, so the rating reflects how dry the fuel has become, not only today's weather.
+// Classes follow the European Forest Fire Information System (provisional: tune against the estate's fire history).
+// The afternoon-peak Fosberg index is kept alongside as a check on wind and humidity at the hottest hour.
+// One row per block (id YYYY-MM-DD|A) plus an estate row (id YYYY-MM-DD) carrying the worst block, for older app versions.
+// Morning run: push to everyone. Midday run ({"run":"midday"}): push only if a block's level went up.
 import { caller, compass8, json, sb, sendPush, users } from '../_shared/alerts.ts';
+import { LEVELS, levelOfFwi } from '../_shared/fwi.ts';
+import { type Hourly, rate } from '../_shared/danger.ts';
 
-const LAT = 6.8243, LON = -0.9059; // estate centre
-const LEVELS = ['low', 'moderate', 'high', 'very_high', 'extreme'] as const;
+// block centroids (from public.compartments, Nov 2026)
+const BLOCKS = [
+  { key: 'A', name: 'Block A', lat: 6.8512, lon: -1.0185 },
+  { key: 'B', name: 'Block B', lat: 6.8019, lon: -0.8884 },
+  { key: 'C', name: 'Block C', lat: 6.8267, lon: -0.8168 },
+];
 const LABEL: Record<string, string> = { low: 'LOW', moderate: 'MODERATE', high: 'HIGH', very_high: 'VERY HIGH', extreme: 'EXTREME' };
 const ACTION: Record<string, string> = {
   low: 'Normal patrols.',
@@ -15,74 +24,78 @@ const ACTION: Record<string, string> = {
   very_high: 'Full standby; extra patrols in young bamboo; no burning anywhere.',
   extreme: 'Maximum readiness: all crews on standby, vehicles fuelled, community warned.',
 };
+const DAYS = 60;
 
-/** Fosberg FFWI from °C, %RH, km/h (0–100). */
-export function ffwi(tC: number, rh: number, windKmh: number) {
-  const T = tC * 9 / 5 + 32, H = Math.max(0, Math.min(100, rh)), U = windKmh * 0.621371;
-  const m = H < 10 ? 0.03229 + 0.281073 * H - 0.000578 * H * T
-    : H <= 50 ? 2.22749 + 0.160107 * H - 0.01478 * T
-    : 21.0606 + 0.005565 * H * H - 0.00035 * H * T - 0.483199 * H;
-  const x = m / 30;
-  const eta = 1 - 2 * x + 1.5 * x * x - 0.5 * x * x * x;
-  return Math.max(0, Math.min(100, (eta * Math.sqrt(1 + U * U)) / 0.3002));
-}
-const levelOf = (f: number) => (f < 10 ? 0 : f < 20 ? 1 : f < 30 ? 2 : f < 40 ? 3 : 4);
+const r1 = (v: number) => Math.round(v * 10) / 10;
 
 Deno.serve(async (req) => {
   const who = await caller(req);
   if (!who || (who.kind === 'user' && who.role !== 'admin')) return json({ error: 'unauthorised' }, 401);
   const body = await req.json().catch(() => ({}));
+  const midday = body.run === 'midday';
 
   const key = Deno.env.get('OPEN_METEO_KEY');
-  const q = `latitude=${LAT}&longitude=${LON}&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m&daily=precipitation_sum&past_days=14&forecast_days=1&wind_speed_unit=kmh&timezone=UTC`;
+  const q = `latitude=${BLOCKS.map((b) => b.lat).join(',')}&longitude=${BLOCKS.map((b) => b.lon).join(',')}` +
+    `&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,precipitation&past_days=${DAYS}&forecast_days=1&wind_speed_unit=kmh&timezone=UTC`;
   const url = key ? `https://customer-api.open-meteo.com/v1/forecast?${q}&apikey=${key}` : `https://api.open-meteo.com/v1/forecast?${q}`;
   const res = await fetch(url);
   if (!res.ok) return json({ error: `weather HTTP ${res.status}` }, 502);
   const w = await res.json();
+  const list = Array.isArray(w) ? w : [w];
 
   const today = new Date().toISOString().slice(0, 10);
-  const H = w.hourly;
-  let peak = { f: -1, t: 0, rh: 0, ws: 0, wd: 0, hour: '' };
-  let tMax = -99, rhMin = 101, wsMax = 0;
-  H.time.forEach((t: string, i: number) => {
-    if (!t.startsWith(today)) return;
-    const hr = Number(t.slice(11, 13));
-    tMax = Math.max(tMax, H.temperature_2m[i]); rhMin = Math.min(rhMin, H.relative_humidity_2m[i]); wsMax = Math.max(wsMax, H.wind_speed_10m[i]);
-    if (hr < 10 || hr > 17) return;
-    const f = ffwi(H.temperature_2m[i], H.relative_humidity_2m[i], H.wind_speed_10m[i]);
-    if (f > peak.f) peak = { f, t: H.temperature_2m[i], rh: H.relative_humidity_2m[i], ws: H.wind_speed_10m[i], wd: H.wind_direction_10m[i], hour: t.slice(11, 16) };
-  });
-  if (peak.f < 0) return json({ error: 'no forecast hours for today' }, 502);
-
-  // rain: days since the last day with ≥2 mm (yesterday backwards), and yesterday's total
-  const D = w.daily;
-  const past = D.time.map((t: string, i: number) => ({ t, p: D.precipitation_sum[i] ?? 0 })).filter((d: { t: string }) => d.t < today);
-  let since = 0;
-  for (let i = past.length - 1; i >= 0 && past[i].p < 2; i--) since++;
-  const rain24 = past.length ? past[past.length - 1].p : 0;
-
-  let lv = levelOf(peak.f);
-  const notes = [`Fosberg index ${peak.f.toFixed(0)} at ${peak.hour}`];
-  if (since >= 7) { lv = Math.min(4, lv + 1); notes.push(`+1: no rain for ${since >= past.length ? `${past.length}+` : since} days`); }
-  if (rain24 >= 5) { lv = Math.max(0, lv - 1); notes.push(`−1: ${rain24.toFixed(0)} mm rain in last 24 h`); }
-  const level = LEVELS[lv];
-
-  const row = {
-    id: today, day: today, level, ffwi: Math.round(peak.f * 10) / 10,
-    temp_max_c: Math.round(tMax * 10) / 10, rh_min_pct: Math.round(rhMin), wind_max_kmh: Math.round(wsMax),
-    wind_from_deg: Math.round(peak.wd), days_since_rain: since, rain_24h_mm: Math.round(rain24 * 10) / 10,
-    basis: notes.join('; '), client_updated_at: new Date().toISOString(),
-  };
-  const { error } = await sb.from('fire_danger').upsert(row);
-  if (error) return json({ error: error.message }, 500);
-
-  let push = null;
-  if (body.notify !== false) {
-    push = await sendPush(await users({ all: true }), {
-      title: `Fire danger today: ${LABEL[level]}`,
-      body: `Afternoon ${Math.round(peak.t)}°C, humidity ${Math.round(peak.rh)}%, wind ${compass8(peak.wd)} ${Math.round(peak.ws)} km/h${since >= 3 ? `, no rain for ${since} days` : ''}. ${ACTION[level]}`,
-      url: '/#/map', tag: `danger-${today}`, urgent: lv >= 3, kind: 'danger',
+  const now = new Date().toISOString();
+  const rows: Record<string, unknown>[] = [];
+  const out: { b: (typeof BLOCKS)[number]; lv: number; r: NonNullable<ReturnType<typeof rate>> }[] = [];
+  for (let k = 0; k < BLOCKS.length; k++) {
+    const b = BLOCKS[k], r = list[k]?.hourly ? rate(list[k].hourly as Hourly, today) : null;
+    if (!r) continue;
+    const lv = levelOfFwi(r.x.fwi);
+    out.push({ b, lv, r });
+    rows.push({
+      id: `${today}|${b.key}`, day: today, block: b.name, level: LEVELS[lv],
+      fwi: r1(r.x.fwi), ffmc: r1(r.x.ffmc), dmc: r1(r.x.dmc), dc: r1(r.x.dc), isi: r1(r.x.isi), bui: r1(r.x.bui),
+      ffwi: r1(Math.max(0, r.peak.f)), temp_max_c: r1(r.tMax), rh_min_pct: Math.round(r.rhMin), wind_max_kmh: Math.round(r.wsMax),
+      wind_from_deg: Math.round(r.peak.wd), days_since_rain: r.since, rain_24h_mm: r1(r.yest),
+      basis: `FWI ${r.x.fwi.toFixed(0)} (FFMC ${r.x.ffmc.toFixed(0)}, DMC ${r.x.dmc.toFixed(0)}, DC ${r.x.dc.toFixed(0)}) from ${DAYS} days of noon weather at the block; ` +
+        `afternoon Fosberg ${Math.max(0, r.peak.f).toFixed(0)} at ${r.peak.hour || '-'}${midday ? '; midday update' : ''}`,
+      client_updated_at: now,
     });
   }
-  return json({ ...row, push });
+  if (!out.length) return json({ error: 'no weather for today' }, 502);
+
+  // estate row = the worst block (older app versions read only this one)
+  const worst = out.reduce((a, c) => (c.lv > a.lv || (c.lv === a.lv && c.r.x.fwi > a.r.x.fwi) ? c : a));
+  const est = rows.find((r) => r.block === worst.b.name)!;
+  rows.push({ ...est, id: today, block: null, basis: `Worst block: ${worst.b.name}. ${est.basis}` });
+
+  // midday: compare with this morning before overwriting
+  let before: Record<string, string> = {};
+  if (midday) {
+    const { data } = await sb.from('fire_danger').select('id, level').in('id', out.map((o) => `${today}|${o.b.key}`));
+    before = Object.fromEntries((data ?? []).map((d) => [d.id as string, d.level as string]));
+  }
+  const { error } = await sb.from('fire_danger').upsert(rows);
+  if (error) return json({ error: error.message }, 500);
+
+  const risen = out.filter((o) => {
+    const was = before[`${today}|${o.b.key}`];
+    return midday && was != null && (LEVELS as readonly string[]).indexOf(was) < o.lv;
+  });
+  let push = null;
+  if (body.notify !== false && (!midday || risen.length)) {
+    const same = out.every((o) => o.lv === worst.lv);
+    const title = midday
+      ? `Fire danger raised: ${risen.map((o) => `${o.b.name} ${LABEL[LEVELS[o.lv]]}`).join(', ')}`
+      : same ? `Fire danger today: ${LABEL[LEVELS[worst.lv]]} (all blocks)` : `Fire danger today: ${LABEL[LEVELS[worst.lv]]} in ${worst.b.name}`;
+    const per = out.map((o) => `${o.b.key} ${LABEL[LEVELS[o.lv]]} (FWI ${o.r.x.fwi.toFixed(0)})`).join(' · ');
+    const p = worst.r.peak;
+    push = await sendPush(await users({ all: true }), {
+      title,
+      body: `${per}. ${worst.b.name} afternoon ${Math.round(p.t)}°C, humidity ${Math.round(p.rh)}%, wind ${compass8(p.wd)} ${Math.round(p.ws)} km/h` +
+        `${worst.r.since >= 3 ? `, no rain for ${worst.r.fullHistory ? `${worst.r.since}+` : worst.r.since} days` : ''}. ${ACTION[LEVELS[worst.lv]]}`,
+      url: '/#/map', tag: `danger-${today}`, urgent: worst.lv >= 3, kind: 'danger',
+    });
+  }
+  return json({ day: today, run: midday ? 'midday' : 'morning', blocks: rows.filter((r) => r.block), risen: risen.map((o) => o.b.name), push });
 });

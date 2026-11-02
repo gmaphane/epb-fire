@@ -32,7 +32,12 @@ export class MemoryRemote implements Remote {
       put('detections', demoDetections());
       put('crew_positions', demoCrewPositions());
       const today = new Date().toISOString().slice(0, 10);
-      put('fire_danger', [{ id: today, day: today, level: 'high', ffwi: 24.1, temp_max_c: 34, rh_min_pct: 28, wind_max_kmh: 18, wind_from_deg: 45, days_since_rain: 9, rain_24h_mm: 0, basis: 'Fosberg index 24 at 14:00; +1: no rain for 9 days (demo)', client_updated_at: new Date().toISOString() }]);
+      put('fire_danger', [
+        { id: today, day: today, block: null, level: 'high', fwi: 26.4, ffwi: 24.1, temp_max_c: 34, rh_min_pct: 28, wind_max_kmh: 18, wind_from_deg: 45, days_since_rain: 9, rain_24h_mm: 0, basis: 'Worst block: Block A (demo)', client_updated_at: new Date().toISOString() },
+        { id: `${today}|A`, day: today, block: 'Block A', level: 'high', fwi: 26.4, ffmc: 89, dmc: 41, dc: 180, isi: 8.1, bui: 52, ffwi: 24.1, temp_max_c: 34, rh_min_pct: 28, wind_max_kmh: 18, wind_from_deg: 45, days_since_rain: 9, rain_24h_mm: 0, basis: 'demo', client_updated_at: new Date().toISOString() },
+        { id: `${today}|B`, day: today, block: 'Block B', level: 'moderate', fwi: 17.2, ffmc: 87, dmc: 30, dc: 150, isi: 6.0, bui: 40, ffwi: 19.5, temp_max_c: 33, rh_min_pct: 33, wind_max_kmh: 15, wind_from_deg: 45, days_since_rain: 6, rain_24h_mm: 0, basis: 'demo', client_updated_at: new Date().toISOString() },
+        { id: `${today}|C`, day: today, block: 'Block C', level: 'moderate', fwi: 14.8, ffmc: 86, dmc: 26, dc: 140, isi: 5.4, bui: 36, ffwi: 18.0, temp_max_c: 33, rh_min_pct: 35, wind_max_kmh: 14, wind_from_deg: 45, days_since_rain: 5, rain_24h_mm: 0, basis: 'demo', client_updated_at: new Date().toISOString() },
+      ]);
       // keep the demo standby crews "live"
       if (typeof window !== 'undefined')
         setInterval(() => {
