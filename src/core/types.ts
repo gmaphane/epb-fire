@@ -294,6 +294,27 @@ export interface FireDanger {
   updated_at?: string;
 }
 
+/** A field check of a potential fire barrier (road, firebreak, stream, plantain farm). Append-only: each check is kept.
+ *  The server applies the newest check to the barrier and redraws the estate-edge gaps near it. */
+export interface BarrierCheck {
+  id: string;
+  barrier_id: string; // road or map layer row id
+  barrier_name: string;
+  checked_at: string;
+  by: string;
+  by_name: string;
+  width_m: number | null; // measured; null = not measured
+  continuity: 'continuous' | 'broken' | 'unknown';
+  condition: 'good' | 'fair' | 'poor' | 'unknown';
+  note: string;
+  lat: number | null;
+  lon: number | null;
+  accuracy_m: number | null;
+  client_updated_at: string;
+  updated_at?: string;
+  _sync?: SyncState;
+}
+
 /** Tables replicated between device and server. */
 export const TABLES = [
   'incidents',
@@ -311,6 +332,7 @@ export const TABLES = [
   'map_layers',
   'crew_positions',
   'fire_danger',
+  'barrier_checks',
 ] as const;
 export type TableName = (typeof TABLES)[number];
 
@@ -325,9 +347,10 @@ export const WRITABLE: TableName[] = [
   'detections',
   'readiness',
   'crew_positions',
+  'barrier_checks',
 ];
 /** Insert-only tables: replays must never overwrite. */
-export const APPEND_ONLY: TableName[] = ['incident_events'];
+export const APPEND_ONLY: TableName[] = ['incident_events', 'barrier_checks'];
 
 export interface GpsFix {
   lat: number;

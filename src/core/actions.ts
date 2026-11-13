@@ -7,7 +7,7 @@ import { getState } from './store';
 import { setPresence, stopResponding } from './presence';
 import { nowIso } from './time';
 import type {
-  Assignment, AssignmentState, EventKind, Hazard, Incident, IncidentEvent, IncidentStatus, Perimeter, PhotoRow, Vertex,
+  Assignment, AssignmentState, BarrierCheck, EventKind, Hazard, Incident, IncidentEvent, IncidentStatus, Perimeter, PhotoRow, Vertex,
 } from './types';
 
 const me = () => {
@@ -198,6 +198,23 @@ export async function reportHazard(kind: Hazard['kind'], note: string) {
 }
 export async function resolveHazard(h: Hazard) {
   await putLocal('hazards', { ...h, resolved_at: nowIso(), client_updated_at: nowIso() });
+}
+
+/** Field check of a potential fire barrier. Saved on the phone first (works with no signal); the server applies the
+ *  newest check to the barrier and redraws the estate-edge gaps near it. GPS is stamped when available, not required. */
+export async function recordBarrierCheck(b: { id: string; name: string }, f: { width_m: number | null; continuity: BarrierCheck['continuity']; condition: BarrierCheck['condition']; note: string }) {
+  const m = me();
+  if (!can(m.role, 'respond')) throw new Error('Only crew, coordinators and admins can record barrier checks');
+  if (f.width_m != null && !(f.width_m > 0 && f.width_m < 500)) throw new Error('Width must be between 0 and 500 m');
+  const { fix } = gps.forRecord();
+  const now = nowIso();
+  const row: BarrierCheck = {
+    id: uuid(), barrier_id: b.id, barrier_name: b.name, checked_at: now, by: m.id, by_name: m.name ?? '',
+    width_m: f.width_m, continuity: f.continuity, condition: f.condition, note: f.note.trim(),
+    lat: fix?.lat ?? null, lon: fix?.lon ?? null, accuracy_m: fix ? Math.round(fix.acc) : null, client_updated_at: now,
+  };
+  await putLocal('barrier_checks', row);
+  return row;
 }
 
 export async function setReadiness(level: 'green' | 'amber' | 'red', note: string) {

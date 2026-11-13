@@ -4,7 +4,8 @@ import L from 'leaflet';
 import { getState, setState, toast, useStore } from '../core/store';
 import { gps } from '../core/gps';
 import { CONFIG } from '../config';
-import { EDGE_GAP_STYLE, MapController, RISK, type RouteLine } from './mapview';
+import { EDGE_GAP_STYLE, MapController, RISK, type BarrierRef, type RouteLine } from './mapview';
+import { BarrierCheckSheet } from './BarrierCheckSheet';
 import { Button, Choice, CoordReadout, NorthDial, RailButton, SatChip, Sheet, StatusChip, SyncChip, cx } from './kit';
 import { fmtDistance, haversineM, toUtm30 } from '../core/geo';
 import { deleteIncident, moveIncident, resolveHazard } from '../core/actions';
@@ -61,6 +62,7 @@ export function MapScreen() {
   const [sel, setSel] = useState<string | null>(null);
   const [selDet, setSelDet] = useState<string | null>(null);
   const [selHaz, setSelHaz] = useState<string | null>(null);
+  const [barrier, setBarrier] = useState<BarrierRef | null>(null); // field check of a road / firebreak / stream / farm
   const [sheet, setSheet] = useState<'closed' | 'list'>('closed');
   const [panel, setPanel] = useState(false);
   const [presenceMenu, setPresenceMenu] = useState(false);
@@ -71,7 +73,7 @@ export function MapScreen() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const followed = useRef(false);
 
-  const closeAll = () => { setSel(null); setSelDet(null); setSelHaz(null); setSheet('closed'); setPresenceMenu(false); };
+  const closeAll = () => { setSel(null); setSelDet(null); setSelHaz(null); setBarrier(null); setSheet('closed'); setPresenceMenu(false); };
 
   useEffect(() => {
     const c = new MapController(el.current!);
@@ -85,6 +87,7 @@ export function MapScreen() {
     onIncident: (id: string) => { setSel(id); setSelDet(null); setPanel(false); setPresenceMenu(false); },
     onDetection: (id: string) => { setSelDet(id); setSel(null); setSelHaz(null); setPanel(false); setPresenceMenu(false); },
     onHazard: (id: string) => { setSelHaz(id); setSel(null); setSelDet(null); setPanel(false); setPresenceMenu(false); },
+    onBarrier: (b: BarrierRef) => { setBarrier(b); setSel(null); setSelDet(null); setSelHaz(null); setPanel(false); setPresenceMenu(false); },
   }), []);
   useEffect(() => {
     // the controller only rebuilds the layer groups whose data changed
@@ -282,7 +285,9 @@ export function MapScreen() {
 
         {/* Bottom sheet: one line by default, a card when something is chosen */}
         <div class="absolute inset-x-0 bottom-0 z-[1150]" data-testid="map-sheet">
-          {inc ? (
+          {barrier ? (
+            <BarrierCheckSheet b={barrier} onClose={() => setBarrier(null)} />
+          ) : inc ? (
             <IncidentCard inc={inc} r={routes.get(inc.id)} role={s.me?.role} onClose={() => setSel(null)} sharingFor={sharing && pr!.incident_id === inc.id ? pr!.status : null} wx={target?.id === inc.id ? wx : null} threats={target?.id === inc.id ? threatList : []} onMove={() => { setMoving(inc.id); setMoveTo(null); setSel(null); }} onDelete={() => setDeleting(inc.id)} />
           ) : haz ? (
             <Sheet testid="hazard-sheet" class="px-5 pb-5 space-y-4" onDown={() => setSelHaz(null)}>

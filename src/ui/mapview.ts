@@ -3,7 +3,7 @@ import { basemap } from '../core/tiles';
 import { CONFIG } from '../config';
 import type { AppState } from '../core/store';
 import type { GpsFix, Incident, Vertex } from '../core/types';
-import { STATUS_LABEL } from '../core/flow';
+import { STATUS_LABEL, can } from '../core/flow';
 
 /**
  * Compartment risk strokes, tuned to read on muted satellite imagery:
@@ -124,6 +124,14 @@ export const EDGE_GAP_STYLE: Record<string, L.PathOptions & { label: string }> =
   gap: { color: '#EF233C', weight: 5, opacity: 0.95, lineCap: 'butt', label: 'No mapped barrier' },
   uncertain: { color: '#F59E0B', weight: 4, opacity: 0.95, dashArray: '7 5', lineCap: 'butt', label: 'Only unverified barriers' },
 };
+/** Map layers that can act as fire barriers (and can be field-checked). Roads are barriers too. */
+const BARRIER_LAYERS = new Set(['firebreak', 'waterway', 'plantain_farm']);
+export interface BarrierRef { id: string; name: string; kind: string }
+/** Popup button for crew/coordinators/admins: record a field check of this possible barrier. */
+const checkButton = (s: MapData, b: BarrierRef) =>
+  s.me && can(s.me.role, 'respond')
+    ? `<button data-barrier-id="${esc(b.id)}" data-barrier-name="${esc(b.name)}" data-barrier-kind="${esc(b.kind)}" style="margin-top:8px;width:100%;min-height:40px;border-radius:9999px;background:#2B2D42;color:#fff;font:600 13px inherit;border:0">Record field check</button>`
+    : '';
 const POLY_LAYERS = ['high_risk_zone', 'burnt_area', 'camera_coverage', 'plantain_farm', 'estate_boundary'];
 const CASED = new Set(['firebreak', 'standby_route']);
 const fmtProp = (k: string, v: unknown) => `<tr><td style="color:#475569;padding-right:8px">${esc(k.replace(/_/g, ' '))}</td><td><b>${esc(String(v))}</b></td></tr>`;
@@ -150,6 +158,8 @@ export interface RenderOpts {
   onDetection?: (id: string) => void;
   onAsset?: (id: string) => void;
   onHazard?: (id: string) => void;
+  /** "Record field check" tapped in a road / firebreak / stream / plantain farm popup */
+  onBarrier?: (b: BarrierRef) => void;
   onMapClick?: (lat: number, lon: number) => void;
 }
 
@@ -165,11 +175,18 @@ export class MapController {
   private last: { s: MapData; o: RenderOpts } | null = null;
 
   constructor(el: HTMLElement, center = CONFIG.center, zoom = 14) {
-    this.map = L.map(el, { zoomControl: false, attributionControl: true, preferCanvas: true, zoomSnap: 0.5 }).setView([center.lat, center.lon], zoom);
+    // tolerance: a finger can hit a 3 px road or firebreak line (for field checks) without pixel-perfect aim
+    this.map = L.map(el, { zoomControl: false, attributionControl: true, preferCanvas: true, renderer: L.canvas({ tolerance: 6 }), zoomSnap: 0.5 }).setView([center.lat, center.lon], zoom);
     for (const k of ['compartments', 'overlayPoly', 'roads', 'overlayLine', 'spread', 'compLabels', 'routes', 'assets', 'crews', 'detections', 'hazards', 'perimeters', 'incidents', 'extra']) this.g[k] = L.layerGroup().addTo(this.map);
     // label visibility and collisions depend on zoom
     this.map.on('zoomend', () => { if (this.last) { this.renderAssets(this.last.s, this.last.o); this.renderCompLabels(this.last.s); this.renderCrews(this.last.s); } });
     this.map.attributionControl.setPrefix('');
+    // "Record field check" buttons live in popup HTML: wire them when a popup opens
+    this.map.on('popupopen', (e: L.PopupEvent) => {
+      const btn = e.popup.getElement()?.querySelector<HTMLButtonElement>('[data-barrier-id]');
+      if (!btn) return;
+      btn.onclick = () => { this.map.closePopup(); this.last?.o.onBarrier?.({ id: btn.dataset.barrierId!, name: btn.dataset.barrierName ?? '', kind: btn.dataset.barrierKind ?? '' }); };
+    });
     L.control.scale({ metric: true, imperial: false, position: 'bottomleft', maxWidth: 90 }).addTo(this.map);
   }
 
@@ -396,9 +413,9 @@ export class MapController {
     const po = this.last?.o;
     this.last = { s, o };
     const ch = (...keys: (keyof MapData)[]) => !p || keys.some((k) => p[k] !== s[k]);
-    if (ch('mapLayers', 'layers')) this.renderOverlays(s);
+    if (ch('mapLayers', 'layers', 'me')) this.renderOverlays(s);
     if (ch('compartments', 'layers')) { this.renderCompartments(s); this.renderCompLabels(s); }
-    if (ch('roads', 'layers')) this.renderRoads(s);
+    if (ch('roads', 'layers', 'me')) this.renderRoads(s);
     if (ch('crewPositions', 'crews', 'layers', 'me', 'incidents')) this.renderCrews(s);
     if (ch('assets', 'layers', 'incidents')) this.renderAssets(s, o);
     if (ch('detections', 'layers') || po?.onDetection !== o.onDetection) this.renderDetections(s, o);
@@ -419,7 +436,7 @@ export class MapController {
       if (CASED.has(l.layer)) L.geoJSON(l.geojson as any, { style: { color: CASING, weight: (st.weight ?? 2) + 2.5, opacity: 0.55 }, interactive: false } as any).addTo(this.g.overlayLine);
       L.geoJSON(l.geojson as any, { style: st })
         .bindTooltip(esc(l.name + (l.props?.area_ha != null ? ` · ${l.props.area_ha} ha` : '')), { sticky: true })
-        .bindPopup(`<b>${esc(l.name)}</b><table style="margin-top:4px;font-size:12px">${rows}</table>`)
+        .bindPopup(`<b>${esc(l.name)}</b><table style="margin-top:4px;font-size:12px">${rows}</table>${BARRIER_LAYERS.has(l.layer) ? checkButton(s, { id: l.id, name: l.name, kind: l.layer }) : ''}`)
         .addTo(POLY_LAYERS.includes(l.layer) ? this.g.overlayPoly : this.g.overlayLine);
     }
   }
@@ -467,7 +484,9 @@ export class MapController {
     for (const r of s.roads) {
       L.geoJSON(r.geojson as any, { style: { color: CASING, weight: 5.5, opacity: 0.5 }, interactive: false } as any).addTo(this.g.roads);
       L.geoJSON(r.geojson as any, { style: { color: r.passable ? '#F8FAFC' : '#EF233C', weight: 2.8, dashArray: r.passable ? undefined : '4 6', opacity: 0.95 } })
-        .bindTooltip(esc(r.name + (r.props?.Status ? ` · ${r.props.Status}` : '') + (r.passable ? '' : ' — NOT PASSABLE'))).addTo(this.g.roads);
+        .bindTooltip(esc(r.name + (r.props?.Status ? ` · ${r.props.Status}` : '') + (r.passable ? '' : ' — NOT PASSABLE')))
+        .bindPopup(`<b>${esc(r.name)}</b><table style="margin-top:4px;font-size:12px">${[r.props?.Type && fmtProp('type', r.props.Type), r.props?.Status && fmtProp('status', r.props.Status), r.props?.length_m != null && fmtProp('length', `${r.props.length_m} m`)].filter(Boolean).join('')}</table>${checkButton(s, { id: r.id, name: r.name, kind: String(r.props?.Type ?? r.props?.type ?? '').toLowerCase() === 'track' ? 'track' : 'road' })}`)
+        .addTo(this.g.roads);
     }
   }
 
