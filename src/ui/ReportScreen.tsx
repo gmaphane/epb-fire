@@ -110,7 +110,7 @@ export function ReportScreen({ detection }: { detection: string | null }) {
 
   const field = 'w-full min-h-[52px] rounded-2xl border border-line bg-card px-4 text-[16px] outline-none focus:border-brand transition-colors';
   return (
-    <Screen title="Report fire" sub={det ? 'From a satellite hotspot' : undefined} back={back} pad={false}>
+    <Screen title="Report fire" sub={det ? 'From a satellite fire detection' : undefined} back={back} pad={false}>
       <div class="relative h-[36%] min-h-[220px] mx-4 rounded-[24px] overflow-hidden shadow-l1">
         <div ref={el} class="absolute inset-0" data-testid="report-map" />
         <div class="absolute top-3 left-3 right-3 z-[1000] pointer-events-none">

@@ -7,7 +7,8 @@ import { CONFIG } from '../config';
 import { bearingDeg, cardinal, fmtDistance, haversineM } from '../core/geo';
 import { isOpen } from '../core/flow';
 import { quality, keepAwake } from '../core/gps';
-import { AppBar, Button, CoordReadout, cx, swipe } from './kit';
+import { AppBar, Button, CoordReadout, NorthDial, cx, swipe } from './kit';
+import { HeadingFilter, NavTracker } from '../core/navtrack';
 import { back, go, useCompass, useGpsFix } from './hooks';
 import { MapController } from './mapview';
 import { metaSet } from '../core/db';
@@ -36,17 +37,21 @@ export function NavigateScreen({ kind, id }: { kind?: string; id?: string }) {
     if (inc) target = { key: inc.id, lat: inc.lat, lon: inc.lon, name: `${inc.compartment ?? inc.block ?? 'Fire'} · ${inc.code ?? inc.label}`, note: inc.notes || `Reported by ${inc.reported_by_name} ${inc.location_estimated ? '(location estimated)' : ''}`, incidentId: inc.id, priority: inc.status !== 'reported' };
   }
   const f = g.fix;
-  const straight = f && target ? haversineM(f.lat, f.lon, target.lat, target.lon) : NaN;
-  // best route over passable tracks + firebreaks (offline); falls back to the straight line
-  const fixKey = f ? `${f.lat.toFixed(4)},${f.lon.toFixed(4)}` : '';
-  const r = useMemo(() => (f && target ? route(s.roads, s.mapLayers, f, target, mode) : null), [fixKey, target?.key, mode, s.roads, s.mapLayers]);
-  const dist = r ? r.distM : straight;
+  // Route planned once, then progress measured along it; re-planned only when clearly off it (core/navtrack).
+  // Travel time = planned time of the part still ahead, so it no longer jumps with GPS speed or jitter.
+  const tracker = useRef(new NavTracker());
+  const navKey = target ? `${target.key}|${mode}|${s.roads.length}|${s.mapLayers.length}` : '';
+  const nav = useMemo(() => (target ? tracker.current.update(f, navKey, (from) => route(s.roads, s.mapLayers, from, target!, mode)) : null), [f, navKey]);
+  const r = nav?.route ?? null;
+  const dist = nav && f ? nav.distM : NaN;
   const brg = f && target ? bearingDeg(f.lat, f.lon, target.lat, target.lon) : NaN;
-  const moving = f?.speed != null && f.speed > 1 && f.heading != null && !Number.isNaN(f.heading);
-  const heading = moving ? f!.heading! : compass;
-  const speedKmh = f?.speed != null && f.speed > 0.8 ? f.speed * 3.6 : mode === 'walk' ? CONFIG.walkSpeedKmh : CONFIG.driveSpeedKmh;
-  const moveEta = f?.speed != null && f.speed > 0.8 && isFinite(dist) ? (dist / 1000 / speedKmh) * 60 : null;
-  const etaMin = r ? Math.max(1, Math.round(moveEta ?? r.etaMin)) : isFinite(dist) ? Math.max(1, Math.round((dist / 1000 / speedKmh) * 60)) : NaN;
+  // which way you're going: GPS course when moving, else the phone compass; smoothed
+  const headingF = useRef(new HeadingFilter());
+  const heading = useMemo(() => headingF.current.update(f, compass.heading), [f, compass.heading]);
+  const etaMin = nav && f && Number.isFinite(nav.etaMin) ? Math.max(1, Math.round(nav.etaMin)) : NaN;
+  // map view: heading-up (follows you, way ahead at the top) or north-up overview
+  const [view, setView] = useState<'heading' | 'north'>('heading');
+  const asked = useRef(false); // iPhone: the first tap on the compass button asks for motion access
   const q = quality(f);
   const assign = target && myAssign && myAssign.incident_id === target.incidentId ? myAssign : null;
   const water = f ? s.assets.filter((a) => a.kind === 'water').map((a) => ({ a, d: haversineM(f.lat, f.lon, a.lat, a.lon), b: bearingDeg(f.lat, f.lon, a.lat, a.lon) })).sort((x, y) => x.d - y.d) : [];
@@ -61,16 +66,34 @@ export function NavigateScreen({ kind, id }: { kind?: string; id?: string }) {
     void keepAwake(true);
     return () => { c.destroy(); ctl.current = null; void keepAwake(false); };
   }, [!!target]);
+  // heading-up: turn the map to your direction and keep you in view (low on screen); north-up: plain overview
+  useEffect(() => {
+    const c = ctl.current; if (!c) return;
+    if (view === 'north' || !f) { c.setRotation(null); return; }
+    const first = !c.rotated;
+    c.setRotation(heading ?? 0, 0.62);
+    if (first) c.map.setView([f.lat, f.lon], Math.max(c.map.getZoom(), mode === 'walk' ? 17.5 : 16.5), { animate: false });
+    else c.map.panTo([f.lat, f.lon], { animate: true, duration: 0.6, easeLinearity: 1 });
+  }, [view, f?.lat, f?.lon, heading, mode]);
   useEffect(() => {
     const c = ctl.current; if (!c || !target) return;
     c.render(getState(), {});
-    c.setMe(f);
+    c.setMe(f, heading);
     const grp = c.extra(); grp.clearLayers();
     c.setRoutes(r ? [{ coords: r.coords, primary: true }] : []);
     if (kind === 'water') L.marker([target.lat, target.lon], { interactive: false, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div style="transform:translate(-50%,-16px);display:flex;flex-direction:column;align-items:center"><span class="pulse" style="width:32px;height:32px;border-radius:9999px;background:${kind === 'water' ? '#2563EB' : '#EF233C'};display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.25)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${kind === 'water' ? '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>' : '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>'}</svg></span></div>` }) }).addTo(grp);
-  }, [f?.lat, f?.lon, target?.key, s.incidents, s.assets, r]);
-  const fitBoth = () => { if (ctl.current && target) ctl.current.fit(r ? r.coords : f ? [[f.lat, f.lon], [target.lat, target.lon]] : [[target.lat, target.lon]], 40, { top: 120, bottom: 230 }); };
-  useEffect(() => { setTimeout(fitBoth, 50); }, [target?.key, !!f]);
+  }, [f?.lat, f?.lon, target?.key, s.incidents, s.assets, r, heading]);
+  const fitBoth = () => {
+    const c = ctl.current; if (!c || !target) return;
+    setView('north'); c.setRotation(null);
+    c.fit(r ? r.coords : f ? [[f.lat, f.lon], [target.lat, target.lon]] : [[target.lat, target.lon]], 40, { top: 120, bottom: 230 });
+  };
+  // no position yet: show the target; heading-up takes over once you have a fix
+  useEffect(() => { if (!f) setTimeout(() => ctl.current && target && ctl.current.fit([[target.lat, target.lon]], 40, { top: 120, bottom: 230 }), 50); }, [target?.key]);
+  const toggleView = () => {
+    if (view === 'north') { void compass.request(); setView('heading'); }
+    else { setView('north'); ctl.current?.setRotation(null); }
+  };
 
   if (!target) {
     return (
@@ -103,6 +126,12 @@ export function NavigateScreen({ kind, id }: { kind?: string; id?: string }) {
         </div>
       </div>
       <div class="absolute right-3 z-[1000] flex flex-col gap-2.5" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 96px)' }}>
+        <button aria-label={view === 'heading' ? 'Map turns with you: tap for north up' : 'North up: tap to turn the map with you'} data-testid="nav-view" aria-pressed={view === 'heading'}
+          onClick={() => { if (compass.needsPermission && !asked.current) { asked.current = true; void compass.request(); setView('heading'); } else toggleView(); }}
+          class={cx('press relative w-11 h-11 rounded-full shadow-rail flex items-center justify-center', view === 'heading' ? 'bg-cobalt text-white' : 'bg-card text-ink')}>
+          <span style={{ transform: `rotate(${view === 'heading' && heading != null ? -heading : 0}deg)`, transition: 'transform .45s linear' }}><NorthDial /></span>
+          {compass.needsPermission && <span class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber border-2 border-white" />}
+        </button>
         <button aria-label="Show me and the target" onClick={fitBoth} class="press w-11 h-11 rounded-full bg-card shadow-rail flex items-center justify-center text-cobalt"><LocateFixed size={20} /></button>
         <button aria-label="Switch basemap" onClick={() => { const b = getState().basemap === 'satellite' ? 'street' : 'satellite'; setState({ basemap: b }); void metaSet('basemap', b); ctl.current?.setBasemap(b); }} class="press w-11 h-11 rounded-full bg-card shadow-rail flex items-center justify-center"><Layers size={20} /></button>
       </div>

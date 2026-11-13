@@ -1,15 +1,27 @@
-// Satellite hotspots (NASA FIRMS, VIIRS + MODIS near-real-time) over the estate, checked every 10 min.
-// Alerts (push to everyone):
-//   - urgent: a new hotspot inside a compartment or within 2 km of one;
-//   - watch (not urgent): 2–5 km away, only on days the nearest block's fire danger is HIGH or above;
+// Satellite fire detections (NASA FIRMS active fires, VIIRS + MODIS near-real-time) over the estate, checked every 10 min.
+// (The function keeps its old name "firms-hotspots" so the schedule keeps working; in EmberWatch "hotspot" means an area
+// with a history of fires, so everything users see says "satellite fire detection".)
+//
+// Each detection is stored complete: nearest compartment, its block and the distance to the compartment edge (0 = inside)
+// are worked out BEFORE the row is inserted. Phones receive new rows over Realtime the moment they are inserted, and the
+// in-app alert needs the distance.
+//
+// Push alerts (to everyone):
+//   - urgent: within 1 km of a compartment (or inside one);
+//   - normal: 1–2 km;
+//   - watch (normal): 2–5 km, only on days the nearest block's fire danger is HIGH or above;
 //   - each alert names the compartment, block, that block's fire danger today, and says when the same spot (within
 //     1 km) was already seen in the last 24 h, i.e. a fire that persists across satellite passes.
+// Fetches 2 days each run, so a failed or timed-out run (or an outage up to ~2 days) is caught up by the next one;
+// detection ids are derived from source + position + time, so re-fetching never duplicates.
 // Needs the free FIRMS MAP_KEY: edge-function secret FIRMS_MAP_KEY, or private.app_keys 'firms_map_key'.
 import { appKey, caller, dd, json, sb, sendPush, users } from '../_shared/alerts.ts';
 
 // estate extent + ~5 km (west, south, east, north)
 const AREA = '-1.10,6.70,-0.71,6.95';
 const SOURCES = ['VIIRS_NOAA20_NRT', 'VIIRS_NOAA21_NRT', 'VIIRS_SNPP_NRT', 'MODIS_NRT'];
+const DAYS = 2;
+const URGENT_WITHIN_M = 1000;
 const ALERT_WITHIN_M = 2000;
 const WATCH_WITHIN_M = 5000;
 const REPEAT_M = 1000;
@@ -38,6 +50,10 @@ const conf = (src: string, c: string) => {
   if (src.startsWith('MODIS')) { const n = Number(c); return n >= 80 ? 'high' : n >= 30 ? 'nominal' : 'low'; }
   return ({ l: 'low', n: 'nominal', h: 'high' } as Record<string, string>)[c?.toLowerCase()] ?? c;
 };
+const satName = (s: string) => s.replace(/_NRT$/, '').replace(/_/g, ' ').replace(/NOAA(\d+)/, 'NOAA-$1').replace('SNPP', 'S-NPP');
+const where = (code: string, m: number) => (m < 1 ? `inside ${code}` : `${m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`} from ${code}`);
+
+type Rec = { id: string; source: string; acq_time: string; confidence: string; frp: number | null; lat: number; lon: number; promoted_incident_id: null; client_updated_at: string; compartment?: string | null; block?: string | null; distance_m?: number | null };
 
 Deno.serve(async (req) => {
   const who = await caller(req);
@@ -45,82 +61,92 @@ Deno.serve(async (req) => {
   const MAP_KEY = Deno.env.get('FIRMS_MAP_KEY') || (await appKey('firms_map_key'));
   if (!MAP_KEY) return json({ skipped: 'FIRMS map key not set' });
 
-  const fresh: { id: string; lat: number; lon: number; source: string; acq_time: string; confidence: string }[] = [];
+  // 1) fetch every source
   const errors: string[] = [];
-  for (const src of SOURCES) {
+  const all = new Map<string, Rec>();
+  await Promise.all(SOURCES.map(async (src) => {
     try {
-      const res = await fetch(`https://firms.modaps.eosdis.nasa.gov/api/area/csv/${MAP_KEY}/${src}/${AREA}/1`);
+      const res = await fetch(`https://firms.modaps.eosdis.nasa.gov/api/area/csv/${MAP_KEY}/${src}/${AREA}/${DAYS}`, { signal: AbortSignal.timeout(20_000) });
       const text = await res.text();
-      if (!res.ok) { errors.push(`${src}: HTTP ${res.status}`); continue; }
-      if (/invalid|error/i.test(text.slice(0, 100)) && !text.startsWith('latitude')) { errors.push(`${src}: ${text.slice(0, 120)}`); continue; }
-      const rows = parseCsv(text);
-      if (!rows.length) continue;
-      const recs = await Promise.all(rows.map(async (r) => {
+      if (!res.ok) { errors.push(`${src}: HTTP ${res.status}`); return; }
+      if (/invalid|error/i.test(text.slice(0, 100)) && !text.startsWith('latitude')) { errors.push(`${src}: ${text.slice(0, 120)}`); return; }
+      for (const r of parseCsv(text)) {
         const t = r.acq_time.padStart(4, '0');
         const acq = new Date(`${r.acq_date}T${t.slice(0, 2)}:${t.slice(2)}:00Z`).toISOString();
         const lat = Number(r.latitude), lon = Number(r.longitude);
-        return { id: await uuidFrom(`${src}|${lat}|${lon}|${acq}`), source: src, acq_time: acq, confidence: conf(src, r.confidence), frp: r.frp ? Number(r.frp) : null, lat, lon, promoted_incident_id: null, client_updated_at: acq };
-      }));
-      // insert only; never overwrite a hotspot someone already promoted to a fire
-      const { data, error } = await sb.from('detections').upsert(recs, { onConflict: 'id', ignoreDuplicates: true }).select('id, lat, lon, source, acq_time, confidence');
-      if (error) { errors.push(`${src}: ${error.message}`); continue; }
-      fresh.push(...(data ?? []));
+        const id = await uuidFrom(`${src}|${lat}|${lon}|${acq}`);
+        all.set(id, { id, source: src, acq_time: acq, confidence: conf(src, r.confidence), frp: r.frp ? Number(r.frp) : null, lat, lon, promoted_incident_id: null, client_updated_at: acq });
+      }
     } catch (e) {
       errors.push(`${src}: ${(e as Error).message}`);
     }
-  }
+  }));
 
-  // locate new hotspots: nearest compartment, its block, and that block's fire danger today
+  // 2) only the ones we don't have yet; locate them (nearest compartment, block, distance) before inserting
+  let fresh: Rec[] = [];
+  const ids = [...all.keys()];
+  if (ids.length) {
+    const have = new Set<string>();
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data, error } = await sb.from('detections').select('id').in('id', ids.slice(i, i + 200));
+      if (error) { errors.push(`lookup: ${error.message}`); return json({ error: 'lookup failed', errors }, 500); }
+      for (const r of data ?? []) have.add(r.id as string);
+    }
+    const todo = ids.filter((id) => !have.has(id)).map((id) => all.get(id)!);
+    if (todo.length) {
+      const { data: near, error: ne } = await sb.rpc('nearest_compartments', { p: todo.map((d, i) => ({ i, lat: d.lat, lon: d.lon })) });
+      if (ne) errors.push(`locate: ${ne.message}`); // still insert: an unlocated detection is better than a lost one
+      for (const n of (near ?? []) as { i: number; code: string; block: string; distance_m: number }[]) {
+        Object.assign(todo[n.i], { compartment: n.code, block: n.block, distance_m: Math.round(n.distance_m) });
+      }
+      // insert only; never overwrite a detection someone already promoted to a fire
+      const { data, error } = await sb.from('detections').upsert(todo, { onConflict: 'id', ignoreDuplicates: true }).select('id');
+      if (error) errors.push(`insert: ${error.message}`);
+      const inserted = new Set((data ?? []).map((r) => r.id as string));
+      fresh = todo.filter((d) => inserted.has(d.id));
+    }
+  }
+  if (errors.length) console.error(JSON.stringify({ firms_errors: errors }));
+
+  // 3) alerts: the block's fire danger today, and repeats of the same fire in the last 24 h
   const today = new Date().toISOString().slice(0, 10);
   const { data: dz } = await sb.from('fire_danger').select('block, level').eq('day', today).not('block', 'is', null);
   const danger = Object.fromEntries((dz ?? []).map((r) => [r.block as string, r.level as string]));
-  const blockOf = new Map<string, string | null>();
-  type Hit = { code: string; block: string | null; dist: number; d: (typeof fresh)[number]; urgent: boolean; seen: number; first: string | null };
+  type Hit = { code: string; block: string | null; dist: number; d: Rec; urgent: boolean; seen: number; first: string | null };
   const hits: Hit[] = [];
   const since = new Date(Date.now() - 24 * 3600e3).toISOString();
   const { data: recent } = await sb.from('detections').select('id, lat, lon, acq_time').gte('acq_time', since);
   const freshIds = new Set(fresh.map((f) => f.id));
   const older = (recent ?? []).filter((r) => !freshIds.has(r.id as string));
   for (const d of fresh) {
-    const { data } = await sb.rpc('nearest_compartment', { p_lat: d.lat, p_lon: d.lon });
-    const n = (data as { code: string; distance_m: number }[] | null)?.[0];
-    let block: string | null = null;
-    if (n) {
-      if (!blockOf.has(n.code)) {
-        const { data: c } = await sb.from('compartments').select('block').eq('code', n.code).limit(1);
-        blockOf.set(n.code, (c?.[0]?.block as string) ?? null);
-      }
-      block = blockOf.get(n.code) ?? null;
-    }
-    await sb.from('detections').update({ compartment: n?.code ?? null, distance_m: n ? Math.round(n.distance_m) : null, block }).eq('id', d.id);
-    if (!n || n.distance_m > WATCH_WITHIN_M) continue;
-    const urgent = n.distance_m <= ALERT_WITHIN_M;
-    const lv = block ? danger[block] : undefined;
-    if (!urgent && !(lv === 'high' || lv === 'very_high' || lv === 'extreme')) continue;
+    if (d.compartment == null || d.distance_m == null || d.distance_m > WATCH_WITHIN_M) continue;
+    const urgent = d.distance_m <= URGENT_WITHIN_M;
+    const lv = d.block ? danger[d.block] : undefined;
+    if (d.distance_m > ALERT_WITHIN_M && !(lv === 'high' || lv === 'very_high' || lv === 'extreme')) continue;
     const same = older.filter((o) => metres(d, o as { lat: number; lon: number }) <= REPEAT_M);
     const first = same.length ? same.map((o) => o.acq_time as string).sort()[0] : null;
-    hits.push({ code: n.code, block, dist: n.distance_m, d, urgent, seen: same.length, first });
+    hits.push({ code: d.compartment, block: d.block ?? null, dist: d.distance_m, d, urgent, seen: same.length, first });
   }
 
   let push = null;
   if (hits.length) {
-    hits.sort((a, b) => Number(b.urgent) - Number(a.urgent) || a.dist - b.dist);
+    hits.sort((a, b) => a.dist - b.dist);
     const f = hits[0];
-    const urgent = hits.some((h) => h.urgent);
-    const where = f.dist < 1 ? `inside ${f.code}` : `${f.dist < 1000 ? `${Math.round(f.dist / 10) * 10} m` : `${(f.dist / 1000).toFixed(1)} km`} from ${f.code}`;
+    const urgent = f.urgent;
     const lv = f.block ? danger[f.block] : undefined;
     const hhmm = f.d.acq_time.slice(11, 16);
     const repeat = f.seen ? ` Seen again: ${f.seen + 1} detections here since ${f.first!.slice(11, 16)} UTC ${f.first!.slice(0, 10) === today ? 'today' : 'yesterday'}.` : '';
     const comps = [...new Set(hits.map((h) => h.code))];
+    const within1 = hits.filter((h) => h.urgent).length;
     push = await sendPush(await users({ all: true }), {
-      title: urgent
-        ? (hits.length > 1 ? `${hits.length} satellite hotspots near the estate` : `Satellite hotspot ${where}`) + (f.seen ? ' (repeat)' : '')
-        : `Watch: hotspot ${where}`,
-      body: `${f.block ?? 'Estate'}${lv ? ` · fire danger ${LABEL[lv]}` : ''} · ${f.d.source.replace('_NRT', '')} pass ${hhmm} UTC · ${f.d.confidence} confidence · ${dd(f.d.lat, f.d.lon)}.` +
+      title: f.dist > ALERT_WITHIN_M
+        ? `Watch: satellite fire ${where(f.code, f.dist)}`
+        : `Satellite fire detection ${where(f.code, f.dist)}` + (within1 > 1 ? ` (+${within1 - 1} more within 1 km)` : '') + (f.seen ? ' (repeat)' : ''),
+      body: `${f.block ?? 'Estate'}${lv ? ` · fire danger ${LABEL[lv]}` : ''} · ${satName(f.d.source)} pass ${hhmm} UTC (GMT) · ${f.d.confidence} confidence · ${dd(f.d.lat, f.d.lon)}.` +
         `${repeat}${hits.length > 1 ? ` Also near ${comps.slice(0, 4).join(', ')}.` : ''} Unverified: check before calling crews.`,
-      url: '/#/map', tag: `hotspot-${f.code}`, urgent, kind: 'hotspot',
+      url: `/#/map?det=${f.d.id}`, tag: `satfire-${f.code}`, urgent, kind: 'hotspot',
     });
     await sb.from('detections').update({ notified_at: new Date().toISOString() }).in('id', hits.map((h) => h.d.id));
   }
-  return json({ new: fresh.length, alerted: hits.length, urgent: hits.filter((h) => h.urgent).length, push, errors });
+  return json({ fetched: all.size, new: fresh.length, alerted: hits.length, urgent: hits.filter((h) => h.urgent).length, push, errors });
 });

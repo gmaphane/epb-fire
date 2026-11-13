@@ -2,7 +2,7 @@ import { remote } from '../boot';
 import { SupabaseRemote } from './remote';
 
 /**
- * Phone push alerts (call-outs, new fire reports, satellite hotspots, daily fire danger).
+ * Phone push alerts (call-outs, new fire reports, satellite fire detections, daily fire danger).
  * Works with the app closed on Android/desktop Chrome. On iPhone (iOS 16.4+) only after
  * "Add to Home Screen" and opening it from there.
  */

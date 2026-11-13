@@ -24,6 +24,9 @@ import { ago } from '../core/time';
 import { CONFIG, IS_DEMO } from '../config';
 import { fmtDd, fmtDms, toUtm30 } from '../core/geo';
 import { radioDigits } from '../core/coords';
+import { metaGet, metaSet } from '../core/db';
+import { markAnnounced, pickSatAlerts, pixelHalfM, satName, satTime, satWhere, type Announced } from '../core/satAlerts';
+import type { Detection } from '../core/types';
 
 // Four tabs: where things are, what is burning, who is out, and settings.
 // Navigate and Perimeter open from a fire (card, list or details), so they are not tabs.
@@ -75,43 +78,113 @@ function PresenceGuard() {
   return null;
 }
 
-/** Tells everyone, inside the app, when a fire is reported or a satellite hotspot is seen near the estate.
- *  (Push alerts cover the phone when the app is closed.) Fires already on the phone at start-up are not re-announced. */
+/** Show a notification in the phone's shade when the app is open but in the background. */
+function shadeNotify(title: string, body: string, path: string, urgent = false) {
+  try {
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted')
+      void navigator.serviceWorker?.ready.then((r) => r.showNotification(title, { body, tag: path, requireInteraction: urgent, data: { url: '/#/' + path } } as NotificationOptions));
+  } catch { /* ignore */ }
+}
+
+/** Tells everyone, inside the app, when a fire is reported. (Push alerts cover the phone when the app is closed.)
+ *  Fires already on the phone at start-up are not re-announced. Satellite detections: see SatFireAlert. */
 function NewFireAlert() {
-  const { me, incidents, detections } = useStore((s) => ({ me: s.me, incidents: s.incidents, detections: s.detections }));
+  const { me, incidents } = useStore((s) => ({ me: s.me, incidents: s.incidents }));
   const seen = useRef<Set<string> | null>(null);
-  const [alert, setAlert] = useState<{ kind: 'fire' | 'hotspot'; go: string; title: string; sub: string; more: number } | null>(null);
+  const [alert, setAlert] = useState<{ go: string; title: string; sub: string; more: number } | null>(null);
   useEffect(() => {
-    const ids = [...incidents.map((i) => 'i' + i.id), ...detections.map((d) => 'd' + d.id)];
+    const ids = incidents.map((i) => i.id);
     if (!seen.current) { seen.current = new Set(ids); return; }
     const recent = (t: string) => Date.now() - new Date(t).getTime() < 6 * 3600_000;
-    const fires = incidents.filter((i) => !seen.current!.has('i' + i.id) && !i.deleted_at && isOpen(i.status) && i.reported_by !== me?.id && recent(i.reported_at));
-    const spots = detections.filter((d) => !seen.current!.has('d' + d.id) && !d.promoted_incident_id && d.distance_m != null && d.distance_m <= 2000 && recent(d.acq_time));
+    const fires = incidents.filter((i) => !seen.current!.has(i.id) && !i.deleted_at && isOpen(i.status) && i.reported_by !== me?.id && recent(i.reported_at));
     ids.forEach((k) => seen.current!.add(k));
-    if (!fires.length && !spots.length) return;
-    const a = fires.length
-      ? { kind: 'fire' as const, go: 'incident/' + fires[0].id, title: `New fire · ${fires[0].compartment ?? fires[0].block ?? 'unmapped area'}`, sub: `${fires[0].status === 'reported' ? 'Unverified' : 'Confirmed'} · ${fires[0].reported_by_name ?? 'reported'} · ${ago(fires[0].reported_at)}`, more: fires.length - 1 + spots.length }
-      : { kind: 'hotspot' as const, go: 'incidents', title: `Satellite hotspot · ${spots[0].compartment ?? 'near the estate'}`, sub: `${spots[0].confidence} confidence · ${ago(spots[0].acq_time)} · unverified`, more: spots.length - 1 };
+    if (!fires.length) return;
+    const a = { go: 'incident/' + fires[0].id, title: `New fire · ${fires[0].compartment ?? fires[0].block ?? 'unmapped area'}`, sub: `${fires[0].status === 'reported' ? 'Unverified' : 'Confirmed'} · ${fires[0].reported_by_name ?? 'reported'} · ${ago(fires[0].reported_at)}`, more: fires.length - 1 };
     setAlert(a);
     chime();
-    // the app is open but in the background: show it in the phone's notification shade too
-    try {
-      if (document.hidden && 'Notification' in window && Notification.permission === 'granted')
-        void navigator.serviceWorker?.ready.then((r) => r.showNotification(a.title, { body: a.sub, tag: a.go, data: { url: '/#/' + a.go } } as NotificationOptions));
-    } catch { /* ignore */ }
-  }, [incidents, detections]);
+    shadeNotify(a.title, a.sub, a.go);
+  }, [incidents]);
   useEffect(() => { if (!alert) return; const t = setTimeout(() => setAlert(null), 30_000); return () => clearTimeout(t); }, [alert]);
   if (!alert) return null;
   return (
-    <div role="alert" data-testid="new-fire-alert" class="fixed top-0 inset-x-0 z-[1990] pt-safe px-3 sheet-enter">
-      <div class="mt-2 rounded-[24px] bg-card shadow-l3 border border-line p-3 pr-2 flex items-center gap-3">
-        <span class={cx('w-11 h-11 rounded-full flex items-center justify-center shrink-0', alert.kind === 'fire' ? 'bg-fire text-on-fire pulse' : 'bg-sat-bg text-sat')}>{alert.kind === 'fire' ? <Flame size={20} fill="currentColor" /> : <Satellite size={20} />}</span>
+    <div role="alert" data-testid="new-fire-alert" class="sheet-enter">
+      <div class="rounded-[24px] bg-card shadow-l3 border border-line p-3 pr-2 flex items-center gap-3">
+        <span class="w-11 h-11 rounded-full flex items-center justify-center shrink-0 bg-fire text-on-fire pulse"><Flame size={20} fill="currentColor" /></span>
         <button class="flex-1 min-w-0 text-left" onClick={() => { setAlert(null); go(alert.go); }}>
           <span class="block text-[16px] font-semibold truncate">{alert.title}</span>
           <span class="block text-[13px] text-muted truncate">{alert.sub}{alert.more > 0 ? ` · +${alert.more} more` : ''}</span>
         </button>
         <button class="press h-10 px-4 rounded-pill bg-brand text-on-brand text-[14px] font-semibold shrink-0" onClick={() => { setAlert(null); go(alert.go); }}>View</button>
         <button aria-label="Dismiss" class="press w-9 h-9 rounded-full flex items-center justify-center text-muted shrink-0" onClick={() => setAlert(null)}><X size={18} /></button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Satellite fire detections (NASA FIRMS) near the estate. Within 1 km of a compartment: an urgent card that stays
+ * until someone taps it. Within 2 km: a short banner. Each detection alerts once per phone, including ones that
+ * arrived while the app was closed (last 24 h), and only once the server has measured its distance (rules: core/satAlerts).
+ */
+function SatFireAlert() {
+  const detections = useStore((s) => s.detections);
+  const announced = useRef<Announced | null>(null);
+  const [ready, setReady] = useState(false);
+  const [urgent, setUrgent] = useState<Detection[]>([]);
+  const [near, setNear] = useState<{ d: Detection; more: number } | null>(null);
+  useEffect(() => { void metaGet<Announced>('satAnnounced').then((a) => { announced.current = a ?? {}; setReady(true); }).catch(() => { announced.current = {}; setReady(true); }); }, []);
+  useEffect(() => {
+    if (!ready || !announced.current) return;
+    const p = pickSatAlerts(detections, announced.current);
+    if (!p.urgent.length && !p.near.length) return;
+    announced.current = markAnnounced(announced.current, [...p.urgent, ...p.near]);
+    void metaSet('satAnnounced', announced.current);
+    if (p.urgent.length) {
+      setUrgent((prev) => [...p.urgent, ...prev.filter((x) => !p.urgent.some((u) => u.id === x.id))].sort((a, b) => Number(a.distance_m) - Number(b.distance_m)));
+      chime(); setTimeout(chime, 1200);
+      const d = p.urgent[0];
+      shadeNotify(`Satellite fire detection ${satWhere(d)}`, `${satName(d.source)} pass ${satTime(d.acq_time)} · ${d.confidence} confidence · unverified`, 'map?det=' + d.id, true);
+    } else {
+      setNear({ d: p.near[0], more: p.near.length - 1 });
+      chime();
+      shadeNotify(`Satellite fire detection ${satWhere(p.near[0])}`, `${satTime(p.near[0].acq_time)} · unverified`, 'map?det=' + p.near[0].id);
+    }
+  }, [detections, ready]);
+  useEffect(() => { if (!near) return; const t = setTimeout(() => setNear(null), 30_000); return () => clearTimeout(t); }, [near]);
+
+  if (urgent.length) {
+    const d = urgent[0];
+    const open = () => { setUrgent([]); go('map?det=' + d.id); };
+    return (
+      <div role="alert" data-testid="sat-alert-urgent" class="sheet-enter">
+        <div class="rounded-[24px] bg-fire text-on-fire shadow-l3 p-4 space-y-3">
+          <div class="flex items-start gap-3">
+            <span class="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center pulse shrink-0"><Satellite size={22} /></span>
+            <div class="min-w-0">
+              <div class="font-display text-[18px] leading-tight">Satellite fire detection {satWhere(d)}</div>
+              <div class="text-[14px] opacity-90 mt-1">{satName(d.source)} pass {satTime(d.acq_time)} · {ago(d.acq_time)} · {d.confidence} confidence · ±{pixelHalfM(d.source)} m</div>
+              <div class="text-[13px] opacity-80 mt-0.5">Unverified: check before calling crews.{urgent.length > 1 ? ` +${urgent.length - 1} more within 1 km.` : ''}</div>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button data-testid="sat-alert-view" class="press flex-1 min-h-[52px] rounded-pill bg-white text-fire-dark font-semibold text-[16px]" onClick={open}>View on map</button>
+            <button data-testid="sat-alert-dismiss" class="press min-h-[52px] px-5 rounded-pill bg-white/15 font-semibold" onClick={() => setUrgent([])}>Dismiss</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (!near) return null;
+  return (
+    <div role="alert" data-testid="sat-alert" class="sheet-enter">
+      <div class="rounded-[24px] bg-card shadow-l3 border border-line p-3 pr-2 flex items-center gap-3">
+        <span class="w-11 h-11 rounded-full flex items-center justify-center shrink-0 bg-sat-bg text-sat"><Satellite size={20} /></span>
+        <button class="flex-1 min-w-0 text-left" onClick={() => { setNear(null); go('map?det=' + near.d.id); }}>
+          <span class="block text-[16px] font-semibold truncate">Satellite fire {satWhere(near.d)}</span>
+          <span class="block text-[13px] text-muted truncate">{satTime(near.d.acq_time)} · {near.d.confidence} confidence · unverified{near.more > 0 ? ` · +${near.more} more` : ''}</span>
+        </button>
+        <button class="press h-10 px-4 rounded-pill bg-brand text-on-brand text-[14px] font-semibold shrink-0" onClick={() => { setNear(null); go('map?det=' + near.d.id); }}>View</button>
+        <button aria-label="Dismiss" class="press w-9 h-9 rounded-full flex items-center justify-center text-muted shrink-0" onClick={() => setNear(null)}><X size={18} /></button>
       </div>
     </div>
   );
@@ -249,7 +322,12 @@ export function App() {
   return (
     <div class="h-full flex flex-col relative bg-surface" data-night={night}>
       <AlarmBanner />
-      <NewFireAlert />
+      <div class="fixed top-0 inset-x-0 z-[1990] pt-safe px-3 pointer-events-none">
+        <div class="mt-2 space-y-2 [&>*]:pointer-events-auto">
+          <SatFireAlert />
+          <NewFireAlert />
+        </div>
+      </div>
       <PresenceGuard />
       <div class="flex-1 min-h-0 relative">{screen}</div>
       {showFab && (onMap ? (

@@ -176,7 +176,7 @@ function Check({ ok, label, bad }: { ok: boolean; label: string; bad: string }) 
   return <li class="flex items-start gap-3"><span class={cx('mt-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0', ok ? 'bg-moss text-on-moss' : 'bg-amber-bg text-amber')}>{ok ? '✓' : '!'}</span><span><span class="block">{label}</span>{!ok && <span class="block text-[13px] text-amber">{bad}</span>}</span></li>;
 }
 
-/** Push alerts on this phone: call-outs, new fire reports, satellite hotspots, daily fire danger. */
+/** Push alerts on this phone: call-outs, new fire reports, satellite fire detections, daily fire danger. */
 function AlertsCard() {
   const [st, setSt] = useState<PushState | null>(null);
   const [busy, setBusy] = useState(false);

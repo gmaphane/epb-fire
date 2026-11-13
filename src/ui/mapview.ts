@@ -36,7 +36,7 @@ const esc = (t: string) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;',
 function callout(html: string, base: string, big = false) {
   return L.divIcon({
     className: '', iconSize: [0, 0], iconAnchor: [0, 0],
-    html: `<div class="callout" style="position:absolute;left:0;top:0;transform:translate(-50%,calc(-100% + 5px))"><div class="callout-body${big ? ' big' : ''}">${html}</div><div class="callout-tip"></div><div class="callout-base" style="background:${base}"></div></div>`,
+    html: `<div class="callout anc" style="position:absolute;left:0;top:0;transform:translate(-50%,calc(-100% + 5px))"><div class="callout-body${big ? ' big' : ''}">${html}</div><div class="callout-tip"></div><div class="callout-base" style="background:${base}"></div></div>`,
   });
 }
 const ICON = {
@@ -177,7 +177,51 @@ export class MapController {
     el.classList.toggle('basemap-street', kind === 'street');
   }
 
-  setMe(fix: GpsFix | null) {
+  /**
+   * Heading-up view: turn the map so `bearing` (degrees clockwise from north) points to the top of the screen.
+   * Leaflet can't rotate, so the map element is made a square big enough to cover the screen at any angle, centred
+   * `focusY` of the way down its parent (so you sit low on screen with the way ahead visible), and turned with CSS.
+   * Marker pins and labels are turned back (CSS var --map-bearing) so they stay upright; "your direction" cones and the
+   * wind arrow are map directions and turn with the map. While rotated, panning by finger is off and pinch zooms on
+   * the centre (Leaflet's touch maths assumes an unrotated map). null = back to north-up.
+   */
+  private rot: { side: number; cy: number; deg: number } | null = null;
+  setRotation(bearing: number | null, focusY = 0.6) {
+    const el = this.map.getContainer();
+    const m = this.map;
+    if (bearing == null || !Number.isFinite(bearing)) {
+      if (!this.rot) return;
+      this.rot = null;
+      el.classList.remove('map-rot');
+      for (const k of ['width', 'height', 'left', 'top', 'right', 'bottom', 'transform', '--map-bearing']) el.style.removeProperty(k);
+      m.dragging.enable();
+      Object.assign(m.options, { touchZoom: true, scrollWheelZoom: true, doubleClickZoom: true });
+      m.invalidateSize({ pan: false });
+      return;
+    }
+    const parent = el.parentElement!;
+    const W = parent.clientWidth, H = parent.clientHeight;
+    const cy = Math.round(H * focusY);
+    const side = Math.ceil(2 * Math.hypot(W / 2, Math.max(cy, H - cy))) + 2;
+    if (!this.rot || this.rot.side !== side || this.rot.cy !== cy) {
+      const center = m.getCenter();
+      Object.assign(el.style, { width: `${side}px`, height: `${side}px`, left: `${Math.round(W / 2 - side / 2)}px`, top: `${cy - Math.round(side / 2)}px`, right: 'auto', bottom: 'auto' });
+      el.classList.add('map-rot');
+      m.dragging.disable();
+      Object.assign(m.options, { touchZoom: 'center', scrollWheelZoom: 'center', doubleClickZoom: 'center' });
+      m.invalidateSize({ pan: false });
+      m.setView(center, m.getZoom(), { animate: false });
+    }
+    // keep the angle continuous (359° → 1° turns 2°, not 358° backwards)
+    const prev = this.rot?.deg ?? bearing;
+    const deg = prev + ((((bearing - prev) % 360) + 540) % 360) - 180;
+    this.rot = { side, cy, deg };
+    el.style.transform = `rotate(${-deg}deg)`;
+    el.style.setProperty('--map-bearing', `${deg}deg`);
+  }
+  get rotated() { return !!this.rot; }
+
+  setMe(fix: GpsFix | null, heading?: number | null) {
     if (!fix) return;
     const ll: L.LatLngExpression = [fix.lat, fix.lon];
     if (!this.meMarker) {
@@ -189,7 +233,7 @@ export class MapController {
     }
     const cone = this.meMarker.getElement()?.querySelector('.me-cone') as HTMLElement | null;
     if (cone) {
-      const h = fix.heading != null && !Number.isNaN(fix.heading) && (fix.speed ?? 0) > 0.5 ? fix.heading : null;
+      const h = heading != null && Number.isFinite(heading) ? heading : fix.heading != null && !Number.isNaN(fix.heading) && (fix.speed ?? 0) > 0.5 ? fix.heading : null;
       cone.style.display = h == null ? 'none' : 'block';
       if (h != null) cone.style.transform = `rotate(${h}deg)`;
     }
@@ -258,7 +302,7 @@ export class MapController {
       const style = hot
         ? `background:#D90429;color:#fff;padding:2px 6px;border-radius:6px;box-shadow:0 1px 4px rgba(43,45,66,.5)`
         : `color:#fff;text-shadow:0 0 3px rgba(43,45,66,.95),0 0 6px rgba(43,45,66,.7)`;
-      L.marker([la, lo], { interactive: false, keyboard: false, zIndexOffset: hot ? 400 : 0, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div style="position:absolute;left:0;top:0;transform:translate(-50%,-50%);font:700 ${size}px/1.1 -apple-system,system-ui,sans-serif;letter-spacing:.02em;white-space:nowrap;${style}">${esc(c.code)}</div>` }) }).addTo(g);
+      L.marker([la, lo], { interactive: false, keyboard: false, zIndexOffset: hot ? 400 : 0, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div class="anc" style="position:absolute;left:0;top:0;transform:translate(-50%,-50%);font:700 ${size}px/1.1 -apple-system,system-ui,sans-serif;letter-spacing:.02em;white-space:nowrap;${style}">${esc(c.code)}</div>` }) }).addTo(g);
     }
   }
 
@@ -280,7 +324,7 @@ export class MapController {
       if (sp.ellipse) L.polygon(sp.ellipse, { renderer: this.canvas, color: '#EF233C', weight: 2, dashArray: '4 6', fillColor: '#EF233C', fillOpacity: 0.1, interactive: false }).addTo(g);
       if (sp.windFrom != null) {
         const down = (sp.windFrom + 180) % 360;
-        L.marker([sp.fire.lat, sp.fire.lon], { interactive: false, zIndexOffset: -10, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div style="position:absolute;left:0;top:0;width:0;height:0;transform:rotate(${down}deg)"><svg width="26" height="90" viewBox="0 0 26 90" style="position:absolute;left:-13px;top:-90px;overflow:visible"><path d="M13 88 V18" stroke="#2B2D42" stroke-width="7" stroke-linecap="round" opacity=".55"/><path d="M13 88 V18" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><path d="M2 22 L13 2 L24 22 Z" fill="#fff" stroke="#2B2D42" stroke-width="1.5" stroke-linejoin="round"/></svg></div>` }) }).addTo(g);
+        L.marker([sp.fire.lat, sp.fire.lon], { interactive: false, zIndexOffset: -10, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div class="map-dir" style="position:absolute;left:0;top:0;width:0;height:0;transform:rotate(${down}deg)"><svg width="26" height="90" viewBox="0 0 26 90" style="position:absolute;left:-13px;top:-90px;overflow:visible"><path d="M13 88 V18" stroke="#2B2D42" stroke-width="7" stroke-linecap="round" opacity=".55"/><path d="M13 88 V18" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><path d="M2 22 L13 2 L24 22 Z" fill="#fff" stroke="#2B2D42" stroke-width="1.5" stroke-linejoin="round"/></svg></div>` }) }).addTo(g);
       }
     }
     if (this.last) this.renderCompLabels(this.last.s);
@@ -332,7 +376,7 @@ export class MapController {
       L.polyline(road, { renderer: this.canvas, color: '#2563EB', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(g);
       // make the start obvious: the route always begins at the user's own GPS position
       const [la, lo] = r.coords[0];
-      L.marker([la, lo], { interactive: false, zIndexOffset: 1100, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div style="position:absolute;left:0;top:0;transform:translate(-50%,calc(-100% - 16px));background:#2563EB;color:#fff;font:700 11px/1 -apple-system,system-ui,sans-serif;padding:4px 7px;border-radius:9999px;white-space:nowrap;box-shadow:0 2px 6px rgba(43,45,66,.35)">You</div>` }) }).addTo(g);
+      L.marker([la, lo], { interactive: false, zIndexOffset: 1100, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div class="anc" style="position:absolute;left:0;top:0;transform:translate(-50%,calc(-100% - 16px));background:#2563EB;color:#fff;font:700 11px/1 -apple-system,system-ui,sans-serif;padding:4px 7px;border-radius:9999px;white-space:nowrap;box-shadow:0 2px 6px rgba(43,45,66,.35)">You</div>` }) }).addTo(g);
     }
   }
 
@@ -422,7 +466,7 @@ export class MapController {
       if (d.promoted_incident_id) continue;
       if (now - Date.parse(d.acq_time) > 48 * 3600_000) continue; // only recent passes on the map
       const m = L.marker([d.lat, d.lon], { icon: L.divIcon({ className: '', iconSize: [24, 24], iconAnchor: [12, 12], html: '<div style="width:18px;height:18px;transform:rotate(45deg);background:#C026D3;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);margin:3px"></div>' }) })
-        .bindTooltip(esc(`Satellite hotspot (unverified) · ${d.source} · ${d.confidence}`));
+        .bindTooltip(esc(`Satellite fire detection (unverified) · ${d.source} · ${d.confidence}`));
       m.on('click', () => o.onDetection?.(d.id));
       m.addTo(this.g.detections);
     }

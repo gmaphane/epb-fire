@@ -17,6 +17,9 @@ export interface Route {
   offRoadM: number;
   etaMin: number;
   viaTracks: boolean;
+  /** Per vertex of `coords`: distance (m) and travel time (min) from the start, for measuring progress along the route. */
+  cumM: number[];
+  cumMin: number[];
 }
 
 type Edge = { to: number; m: number; kind: 'road' | 'firebreak' };
@@ -182,7 +185,7 @@ class Heap {
 export function route(roads: Road[], layers: MapLayer[], from: { lat: number; lon: number }, to: { lat: number; lon: number }, mode: Mode = 'drive'): Route {
   const straightM = distM(from.lat, from.lon, to.lat, to.lon);
   const walkMin = (m: number) => (m / 1000 / CONFIG.walkSpeedKmh) * 60;
-  const direct: Route = { coords: [[from.lat, from.lon], [to.lat, to.lon]], distM: straightM, onTrackM: 0, offRoadM: straightM, etaMin: walkMin(straightM), viaTracks: false };
+  const direct: Route = { coords: [[from.lat, from.lon], [to.lat, to.lon]], distM: straightM, onTrackM: 0, offRoadM: straightM, etaMin: walkMin(straightM), viaTracks: false, cumM: [0, straightM], cumMin: [0, walkMin(straightM)] };
   const g = buildGraph(roads, layers, mode === 'walk');
   if (!g.segs.length || straightM < 60) return direct;
 
@@ -241,7 +244,16 @@ export function route(roads: Road[], layers: MapLayer[], from: { lat: number; lo
   // when the network path is absurd, e.g. the two ends sit on separate, unconnected track systems.
   if (onTrackM > Math.max(20 * straightM, straightM + 15_000)) return direct;
   const coords: [number, number][] = [[from.lat, from.lon], ...path.map((i) => [lat(i), lon(i)] as [number, number]), [to.lat, to.lon]];
-  return { coords, distM: onTrackM + offRoadM, onTrackM, offRoadM, etaMin, viaTracks: true };
+  // cumulative distance and time per vertex: walk to the track, each track edge at its own speed, walk to the goal
+  const cumM = [0, sA.d], cumMin = [0, walkMin(sA.d)];
+  for (let i = 1; i < path.length; i++) {
+    const m = distM(lat(path[i - 1]), lon(path[i - 1]), lat(path[i]), lon(path[i]));
+    cumM.push(cumM[cumM.length - 1] + m);
+    cumMin.push(cumMin[cumMin.length - 1] + cost(m, pkind[path[i]] ?? 'road'));
+  }
+  cumM.push(cumM[cumM.length - 1] + sB.d);
+  cumMin.push(cumMin[cumMin.length - 1] + walkMin(sB.d));
+  return { coords, distM: onTrackM + offRoadM, onTrackM, offRoadM, etaMin, viaTracks: true, cumM, cumMin };
 }
 
 export const fmtEta = (min: number) => (min < 1 ? '<1 min' : min < 60 ? `${Math.round(min)} min` : `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, '0')}`);

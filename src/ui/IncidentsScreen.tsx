@@ -62,7 +62,7 @@ export function IncidentsScreen() {
 
         {f !== 'closed' && dets.length > 0 && can(role, 'respond') && (
           <section class="mt-7 px-4">
-            <h2 class="font-display text-[18px] mb-3 flex items-center gap-2">Satellite hotspots <span class="text-[14px] font-sans text-muted">{dets.length}</span></h2>
+            <h2 class="font-display text-[18px] mb-3 flex items-center gap-2">Satellite fire detections <span class="text-[14px] font-sans text-muted">{dets.length}</span></h2>
             <div class="bg-card rounded-card border border-line divide-y divide-line overflow-hidden">
               {dets.map((d) => (
                 <button key={d.id} data-testid="detection-card" class="press w-full px-4 py-3 flex items-center gap-3 text-left active:bg-surface-low" onClick={() => go('report?det=' + d.id)}>

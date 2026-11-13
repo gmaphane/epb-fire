@@ -1,5 +1,5 @@
 /**
- * Audible + haptic alarm for call-outs (FR-MOB-03) and a short chime for new fires/hotspots.
+ * Audible + haptic alarm for call-outs (FR-MOB-03) and a short chime for new fires/satellite fire detections.
  *
  * Sound plays through an <audio> element (media channel), with the page's audio session set to
  * "playback" where supported (Safari 17+). That keeps it audible while the ringer is on silent,
@@ -132,7 +132,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('pointerdown', unlockAudio, { once: true, passive: true });
 }
 
-/** One short two-tone chime + buzz for a new fire or hotspot (not repeating, unlike a call-out). */
+/** One short two-tone chime + buzz for a new fire or satellite fire detection (not repeating, unlike a call-out). */
 export function chime() {
   unlockAudio();
   makeEls();

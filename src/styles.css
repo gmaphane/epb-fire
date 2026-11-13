@@ -69,6 +69,14 @@ button:disabled { opacity: .5; }
 .me-dot { width: 14px; height: 14px; border-radius: 9999px; background: #2563EB; box-shadow: 0 0 8px rgba(37,99,235,.6); border: 2px solid #fff; }
 .me-cone { position: absolute; left: 50%; top: -9px; margin-left: -5px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid rgba(37,99,235,.7); transform-origin: 5px 23px; }
 @keyframes ping { 75%, 100% { transform: scale(1.6); opacity: 0; } }
+/* heading-up map (MapController.setRotation): the map element turns; pins and labels turn back so they stay upright.
+   .anc = content placed relative to its map point (turn about that point); .me-wrap / .map-dir show map directions. */
+.map-rot { transition: transform .45s linear; }
+.map-rot .leaflet-marker-icon > :not(.me-wrap):not(.map-dir) { rotate: var(--map-bearing, 0deg); }
+.map-rot .leaflet-marker-icon > .anc { transform-origin: 0 0; }
+.map-rot .leaflet-control-container { display: none; }
+.map-rot .leaflet-overlay-pane, .map-rot .leaflet-overlay-pane * { pointer-events: none !important; } /* taps would hit the wrong shape */
+@media (prefers-reduced-motion: reduce) { .map-rot { transition: none; } }
 .callout { display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%); white-space: nowrap; cursor: pointer; }
 .callout-body { display: flex; align-items: center; gap: 6px; background: rgb(var(--c-card)); color: rgb(var(--c-ink)); padding: 6px 10px; border-radius: 9999px; box-shadow: 0 6px 18px rgba(43,45,66,.14); font: 600 12px/16px inherit; }
 .callout-body.big { border-radius: 12px; padding: 6px 10px 6px 6px; box-shadow: 0 6px 18px rgba(43,45,66,.14); }

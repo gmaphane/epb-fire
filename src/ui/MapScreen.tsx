@@ -9,7 +9,8 @@ import { Button, Choice, CoordReadout, NorthDial, RailButton, SatChip, Sheet, St
 import { fmtDistance, haversineM, toUtm30 } from '../core/geo';
 import { deleteIncident, moveIncident, resolveHazard } from '../core/actions';
 import { ago } from '../core/time';
-import { go, useGpsFix } from './hooks';
+import { go, useGpsFix, useRoute } from './hooks';
+import { pixelHalfM, satName, satTime, satWhere } from '../core/satAlerts';
 import { isOpen } from '../core/flow';
 import { metaSet } from '../core/db';
 import { fmtEta, route, type Mode, type Route } from '../core/route';
@@ -31,7 +32,7 @@ const LAYERS: { k: string; label: string; swatch: string }[] = [
   { k: 'camp', label: 'Camps', swatch: 'dot:#334155' },
   { k: 'standby_post', label: 'Standby posts', swatch: 'dot:#2B2D42' },
   { k: 'crews', label: 'Crews (live)', swatch: 'ring:#2563EB' },
-  { k: 'detections', label: 'Satellite hotspots', swatch: 'diamond:#C026D3' },
+  { k: 'detections', label: 'Satellite fire detections', swatch: 'diamond:#C026D3' },
 ];
 
 function Swatch({ s }: { s: string }) {
@@ -97,6 +98,17 @@ export function MapScreen() {
     const f = s.mapFocus;
     if (f && Date.now() - f.t < 5000) { followed.current = true; ctl.current?.map.setView([f.lat, f.lon], f.zoom); }
   }, [s.mapFocus]);
+  // opened from a satellite fire alert (#/map?det=<id>): show that detection and its card
+  const detParam = useRoute().q.get('det');
+  useEffect(() => {
+    const d = detParam ? s.detections.find((x) => x.id === detParam) : null;
+    if (!d || !ctl.current) return;
+    followed.current = true;
+    if (!getState().layers.detections) setState({ layers: { ...getState().layers, detections: true } });
+    ctl.current.map.setView([d.lat, d.lon], Math.max(ctl.current.map.getZoom(), 14));
+    handlers.onDetection(d.id);
+    history.replaceState(null, '', '#/map'); // once only, so going back to the map doesn't reopen it
+  }, [detParam, s.detections.length]);
 
   // tap on empty map closes sheets/panels; while measuring, taps add points instead
   useEffect(() => {
@@ -125,13 +137,16 @@ export function MapScreen() {
   const det = s.detections.find((d) => d.id === selDet);
   const haz = s.hazards.find((h) => h.id === selHaz && !h.resolved_at);
 
-  // routes: me → every open fire (rounded fix so GPS jitter doesn't recompute)
-  const fixKey = here ? `${here.lat.toFixed(4)},${here.lon.toFixed(4)}` : '';
+  // routes: me → every open fire. Re-planned only after moving 50 m with a usable fix, so GPS jitter doesn't flip the
+  // route between nearby tracks and make the times jump (step-by-step tracking is on the Navigate screen).
+  const anchor = useRef<{ lat: number; lon: number } | null>(null);
+  if (here && (!anchor.current || (here.acc <= 60 && haversineM(anchor.current.lat, anchor.current.lon, here.lat, here.lon) > 50))) anchor.current = { lat: here.lat, lon: here.lon };
+  const fixKey = here && anchor.current ? `${anchor.current.lat},${anchor.current.lon}` : '';
   const activeKey = active.map((i) => i.id + i.lat + i.lon).join();
   const routes = useMemo(() => {
     const m = new Map<string, Route>();
     if (!here) return m;
-    for (const i of active) m.set(i.id, route(s.roads, s.mapLayers, here, i, mode));
+    for (const i of active) m.set(i.id, route(s.roads, s.mapLayers, anchor.current ?? here, i, mode));
     return m;
   }, [fixKey, activeKey, s.roads, s.mapLayers, mode]);
   const ranked = [...active].sort((a, b) => (routes.get(a.id)?.etaMin ?? 1e9) - (routes.get(b.id)?.etaMin ?? 1e9));
@@ -275,12 +290,13 @@ export function MapScreen() {
             <Sheet class="px-5 pb-5 space-y-4" onDown={() => setSelDet(null)}>
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <h2 class="font-display text-[20px] leading-tight">Satellite hotspot</h2>
-                  <p class="text-[14px] text-muted mt-1">{det.compartment ? (det.distance_m != null && det.distance_m < 1 ? `Inside ${det.compartment}` : `${fmtDistance(det.distance_m ?? 0)} from ${det.compartment}`) : 'Outside the estate'} · {ago(det.acq_time)}{here ? ` · ${fmtDistance(haversineM(here.lat, here.lon, det.lat, det.lon))} away` : ''}</p>
+                  <h2 class="font-display text-[20px] leading-tight">Satellite fire detection</h2>
+                  <p class="text-[14px] text-muted mt-1">{det.compartment ? satWhere(det).replace(/^./, (c) => c.toUpperCase()) : 'Outside the estate'} · {ago(det.acq_time)}{here ? ` · ${fmtDistance(haversineM(here.lat, here.lon, det.lat, det.lon))} from you` : ''}</p>
+                  <p class="text-[13px] text-muted mt-0.5">{satName(det.source)} pass {satTime(det.acq_time)}</p>
                 </div>
                 <button aria-label="Close" class="press w-9 h-9 -mr-1 rounded-full flex items-center justify-center text-muted shrink-0" onClick={() => setSelDet(null)}><X size={20} /></button>
               </div>
-              <div class="flex items-center gap-2"><SatChip text={`${det.confidence} confidence`} /><span class="text-[13px] text-muted">±375 m</span></div>
+              <div class="flex items-center gap-2"><SatChip text={`${det.confidence} confidence`} /><span class="text-[13px] text-muted">±{pixelHalfM(det.source)} m · unverified</span></div>
               <Button kind="danger" size="lg" full icon={<Satellite size={18} />} onClick={() => go('report?det=' + det.id)}>Report as fire</Button>
             </Sheet>
           ) : sheet === 'list' && active.length ? (
