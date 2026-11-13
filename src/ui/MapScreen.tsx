@@ -4,13 +4,14 @@ import L from 'leaflet';
 import { getState, setState, toast, useStore } from '../core/store';
 import { gps } from '../core/gps';
 import { CONFIG } from '../config';
-import { MapController, RISK, type RouteLine } from './mapview';
+import { EDGE_GAP_STYLE, MapController, RISK, type RouteLine } from './mapview';
 import { Button, Choice, CoordReadout, NorthDial, RailButton, SatChip, Sheet, StatusChip, SyncChip, cx } from './kit';
 import { fmtDistance, haversineM, toUtm30 } from '../core/geo';
 import { deleteIncident, moveIncident, resolveHazard } from '../core/actions';
 import { ago } from '../core/time';
 import { go, useGpsFix, useRoute } from './hooks';
 import { pixelHalfM, satName, satTime, satWhere } from '../core/satAlerts';
+import { barrierSentence } from '../../supabase/functions/_shared/barriers';
 import { isOpen } from '../core/flow';
 import { metaSet } from '../core/db';
 import { fmtEta, route, type Mode, type Route } from '../core/route';
@@ -28,6 +29,8 @@ const LAYERS: { k: string; label: string; swatch: string }[] = [
   { k: 'compartments', label: 'Compartments', swatch: 'risk' },
   { k: 'roads', label: 'Roads & tracks', swatch: 'line:#F8FAFC' },
   { k: 'firebreak', label: 'Firebreaks', swatch: 'dash:#F8FAFC' },
+  { k: 'edge_gap', label: 'Estate edge gaps', swatch: 'line:#EF233C' },
+  { k: 'plantain_farm', label: 'Plantain farms', swatch: 'dot:#84CC16' },
   { k: 'water', label: 'Water points', swatch: 'dot:#2563EB' },
   { k: 'camp', label: 'Camps', swatch: 'dot:#334155' },
   { k: 'standby_post', label: 'Standby posts', swatch: 'dot:#2B2D42' },
@@ -261,6 +264,14 @@ export function MapScreen() {
                 </button>
               ))}
             </div>
+            {s.layers.edge_gap && (
+              <div class="px-2 pt-2 mt-1 border-t border-line text-[11px] text-muted space-y-1" data-testid="edge-gap-legend">
+                {Object.entries(EDGE_GAP_STYLE).map(([k, st]) => (
+                  <div key={k} class="flex items-center gap-2"><span class="w-5 h-[4px]" style={k === 'gap' ? { background: st.color } : { backgroundImage: `repeating-linear-gradient(90deg, ${st.color} 0 5px, transparent 5px 8px)` }} />{st.label} within 2 km outside</div>
+                ))}
+                <div>A mapped road, firebreak, stream or farm is only a possible barrier until checked in the field.</div>
+              </div>
+            )}
             {s.layers.compartments && (
               <div class="px-2 pt-2 mt-1 border-t border-line flex items-center justify-between gap-1 text-[11px] text-muted">
                 {Object.values(RISK).map((r) => <span key={r.label} class="flex items-center gap-1"><span class="w-2 h-2 rounded-full" style={{ background: r.c }} />{r.label.replace('Very high', 'V.high').replace('Moderate', 'Mod.')}</span>)}
@@ -297,6 +308,9 @@ export function MapScreen() {
                 <button aria-label="Close" class="press w-9 h-9 -mr-1 rounded-full flex items-center justify-center text-muted shrink-0" onClick={() => setSelDet(null)}><X size={20} /></button>
               </div>
               <div class="flex items-center gap-2"><SatChip text={`${det.confidence} confidence`} /><span class="text-[13px] text-muted">±{pixelHalfM(det.source)} m · unverified</span></div>
+              {det.barriers && det.barriers.status !== 'inside' && (
+                <p data-testid="det-barriers" class={cx('text-[13px] rounded-2xl px-3 py-2', det.barriers.status === 'protected' ? 'bg-moss/10' : 'bg-amber-bg text-ink')}>{barrierSentence(det.barriers, det.compartment)}</p>
+              )}
               <Button kind="danger" size="lg" full icon={<Satellite size={18} />} onClick={() => go('report?det=' + det.id)}>Report as fire</Button>
             </Sheet>
           ) : sheet === 'list' && active.length ? (

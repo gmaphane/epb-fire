@@ -1,3 +1,4 @@
+import type { BarrierSummary } from '../../supabase/functions/_shared/barriers';
 export type Role = 'reporter' | 'responder' | 'coordinator' | 'manager' | 'admin';
 
 export type IncidentStatus =
@@ -174,6 +175,7 @@ export interface Detection {
   distance_m?: number | null; // 0 = inside
   block?: string | null; // block of the nearest compartment (server-computed)
   notified_at?: string | null;
+  barriers?: BarrierSummary | null; // what lies between it and the compartment (server-computed, within 2 km)
   client_updated_at: string;
   updated_at?: string;
 }
@@ -198,6 +200,14 @@ export interface Compartment {
   risk_score: number | null;
   treatment_status: string;
   props?: Record<string, unknown>;
+  // estate edge (server-computed by refresh_fire_risk_layers): share of its edge with a checked barrier / only
+  // unverified barriers / no mapped barrier along the outward 2 km
+  edge?: boolean;
+  edge_length_m?: number | null;
+  edge_protected_pct?: number | null;
+  edge_uncertain_pct?: number | null;
+  edge_gap_pct?: number | null;
+  edge_checked_at?: string | null;
   updated_at?: string;
 }
 
@@ -210,8 +220,10 @@ export interface Road {
   updated_at?: string;
 }
 
-/** Reference overlays: firebreaks, high-risk zones, camera views, patrol routes, burnt-area history, waterways. */
-export type MapLayerKind = 'firebreak' | 'high_risk_zone' | 'camera_coverage' | 'standby_route' | 'burnt_area' | 'waterway';
+/** Reference overlays: firebreaks, high-risk zones, camera views, patrol routes, burnt-area history, waterways,
+ *  plantain farms, and the server-computed estate edge, its 2 km zones and its gaps (no / only unverified barriers). */
+export type MapLayerKind = 'firebreak' | 'high_risk_zone' | 'camera_coverage' | 'standby_route' | 'burnt_area' | 'waterway'
+  | 'plantain_farm' | 'estate_boundary' | 'edge_zone' | 'edge_gap';
 export interface MapLayer {
   id: string;
   layer: MapLayerKind;

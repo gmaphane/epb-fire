@@ -10,12 +10,14 @@
 //   - urgent: within 1 km of a compartment (or inside one);
 //   - normal: 1–2 km;
 //   - watch (normal): 2–5 km, only on days the nearest block's fire danger is HIGH or above;
-//   - each alert names the compartment, block, that block's fire danger today, and says when the same spot (within
-//     1 km) was already seen in the last 24 h, i.e. a fire that persists across satellite passes.
+//   - each alert names the compartment, block, that block's fire danger today, what lies between the detection and
+//     the compartment (mapped barriers, and whether any is verified), and says when the same spot (within 1 km) was
+//     already seen in the last 24 h, i.e. a fire that persists across satellite passes.
 // Fetches 2 days each run, so a failed or timed-out run (or an outage up to ~2 days) is caught up by the next one;
 // detection ids are derived from source + position + time, so re-fetching never duplicates.
 // Needs the free FIRMS MAP_KEY: edge-function secret FIRMS_MAP_KEY, or private.app_keys 'firms_map_key'.
 import { appKey, caller, dd, json, sb, sendPush, users } from '../_shared/alerts.ts';
+import { barrierSentence, type BarrierSummary } from '../_shared/barriers.ts';
 
 // estate extent + ~5 km (west, south, east, north)
 const AREA = '-1.10,6.70,-0.71,6.95';
@@ -53,7 +55,7 @@ const conf = (src: string, c: string) => {
 const satName = (s: string) => s.replace(/_NRT$/, '').replace(/_/g, ' ').replace(/NOAA(\d+)/, 'NOAA-$1').replace('SNPP', 'S-NPP');
 const where = (code: string, m: number) => (m < 1 ? `inside ${code}` : `${m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`} from ${code}`);
 
-type Rec = { id: string; source: string; acq_time: string; confidence: string; frp: number | null; lat: number; lon: number; promoted_incident_id: null; client_updated_at: string; compartment?: string | null; block?: string | null; distance_m?: number | null };
+type Rec = { id: string; source: string; acq_time: string; confidence: string; frp: number | null; lat: number; lon: number; promoted_incident_id: null; client_updated_at: string; compartment?: string | null; block?: string | null; distance_m?: number | null; barriers?: BarrierSummary | null };
 
 Deno.serve(async (req) => {
   const who = await caller(req);
@@ -99,6 +101,18 @@ Deno.serve(async (req) => {
       for (const n of (near ?? []) as { i: number; code: string; block: string; distance_m: number }[]) {
         Object.assign(todo[n.i], { compartment: n.code, block: n.block, distance_m: Math.round(n.distance_m) });
       }
+      // what lies between each nearby detection and its compartment (public.barriers_between). Skipped while the
+      // barrier list is empty (not built yet), so an unbuilt list is never reported as "no barrier".
+      const { data: cfg } = await sb.from('risk_config').select('params').eq('id', 'site').maybeSingle();
+      const within = Number((cfg?.params as Record<string, unknown> | undefined)?.detection_check_within_m ?? 2000);
+      const { count: nb } = await sb.from('fire_barriers').select('id', { count: 'exact', head: true });
+      const check = todo.map((d, i) => ({ i, lat: d.lat, lon: d.lon, code: d.compartment, dist: d.distance_m }))
+        .filter((x) => x.code && x.dist != null && x.dist > 0 && x.dist <= within);
+      if (check.length && nb) {
+        const { data: bb, error: be } = await sb.rpc('barriers_between', { p: check.map(({ i, lat, lon, code }) => ({ i, lat, lon, code })) });
+        if (be) errors.push(`barriers: ${be.message}`); // the detection is still stored and alerted, just without this line
+        for (const b of (bb ?? []) as { i: number; summary: BarrierSummary | null }[]) todo[b.i].barriers = b.summary;
+      }
       // insert only; never overwrite a detection someone already promoted to a fire
       const { data, error } = await sb.from('detections').upsert(todo, { onConflict: 'id', ignoreDuplicates: true }).select('id');
       if (error) errors.push(`insert: ${error.message}`);
@@ -143,7 +157,7 @@ Deno.serve(async (req) => {
         ? `Watch: satellite fire ${where(f.code, f.dist)}`
         : `Satellite fire detection ${where(f.code, f.dist)}` + (within1 > 1 ? ` (+${within1 - 1} more within 1 km)` : '') + (f.seen ? ' (repeat)' : ''),
       body: `${f.block ?? 'Estate'}${lv ? ` · fire danger ${LABEL[lv]}` : ''} · ${satName(f.d.source)} pass ${hhmm} UTC (GMT) · ${f.d.confidence} confidence · ${dd(f.d.lat, f.d.lon)}.` +
-        `${repeat}${hits.length > 1 ? ` Also near ${comps.slice(0, 4).join(', ')}.` : ''} Unverified: check before calling crews.`,
+        `${f.d.barriers ? ` ${barrierSentence(f.d.barriers, f.code)}` : ''}${repeat}${hits.length > 1 ? ` Also near ${comps.slice(0, 4).join(', ')}.` : ''} Unverified: check before calling crews.`,
       url: `/#/map?det=${f.d.id}`, tag: `satfire-${f.code}`, urgent, kind: 'hotspot',
     });
     await sb.from('detections').update({ notified_at: new Date().toISOString() }).in('id', hits.map((h) => h.d.id));

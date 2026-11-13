@@ -116,8 +116,15 @@ const OVERLAY_STYLE: Record<string, L.PathOptions> = {
   firebreak: { color: '#F8FAFC', weight: 2, dashArray: '5 5', opacity: 0.95 },
   standby_route: { color: '#F8FAFC', weight: 2, dashArray: '1 6', lineCap: 'round', opacity: 0.9 },
   waterway: { color: '#38BDF8', weight: 2, opacity: 0.85 },
+  plantain_farm: { color: '#65A30D', weight: 1, fillColor: '#84CC16', fillOpacity: 0.3 },
+  estate_boundary: { color: '#F8FAFC', weight: 1.5, opacity: 0.7, fill: false, interactive: false },
 };
-const POLY_LAYERS = ['high_risk_zone', 'burnt_area', 'camera_coverage'];
+/** Estate edge stretches: red = no mapped barrier in the 2 km outside; amber dashed = only unverified barriers. */
+export const EDGE_GAP_STYLE: Record<string, L.PathOptions & { label: string }> = {
+  gap: { color: '#EF233C', weight: 5, opacity: 0.95, lineCap: 'butt', label: 'No mapped barrier' },
+  uncertain: { color: '#F59E0B', weight: 4, opacity: 0.95, dashArray: '7 5', lineCap: 'butt', label: 'Only unverified barriers' },
+};
+const POLY_LAYERS = ['high_risk_zone', 'burnt_area', 'camera_coverage', 'plantain_farm', 'estate_boundary'];
 const CASED = new Set(['firebreak', 'standby_route']);
 const fmtProp = (k: string, v: unknown) => `<tr><td style="color:#475569;padding-right:8px">${esc(k.replace(/_/g, ' '))}</td><td><b>${esc(String(v))}</b></td></tr>`;
 
@@ -405,8 +412,9 @@ export class MapController {
     this.g.overlayPoly.clearLayers();
     this.g.overlayLine.clearLayers();
     for (const l of s.mapLayers ?? []) {
-      if (!on[l.layer]) continue;
-      const st = OVERLAY_STYLE[l.layer] ?? { color: '#F8FAFC', weight: 1.5 };
+      // the estate outline is drawn with the edge gaps; edge zones are analysis areas, not drawn
+      if (!(on[l.layer] || (l.layer === 'estate_boundary' && on.edge_gap)) || l.layer === 'edge_zone') continue;
+      const st = l.layer === 'edge_gap' ? EDGE_GAP_STYLE[String(l.props?.status)] ?? EDGE_GAP_STYLE.gap : OVERLAY_STYLE[l.layer] ?? { color: '#F8FAFC', weight: 1.5 };
       const rows = Object.entries(l.props ?? {}).filter(([k]) => k !== 'source').slice(0, 8).map(([k, v]) => fmtProp(k, v)).join('');
       if (CASED.has(l.layer)) L.geoJSON(l.geojson as any, { style: { color: CASING, weight: (st.weight ?? 2) + 2.5, opacity: 0.55 }, interactive: false } as any).addTo(this.g.overlayLine);
       L.geoJSON(l.geojson as any, { style: st })
@@ -433,6 +441,11 @@ export class MapController {
             p.burnt_2023_24_s2_ha != null && fmtProp('burnt 2023/24 (Sentinel-2)', `${p.burnt_2023_24_s2_ha} ha`),
             p.burnt_2025_26_s2_ha != null && fmtProp('burnt 2025/26 (Sentinel-2)', `${p.burnt_2025_26_s2_ha} ha`),
             c.treatment_status && fmtProp('treatment', c.treatment_status),
+            c.edge && fmtProp('estate edge', `${((c.edge_length_m ?? 0) / 1000).toFixed(1)} km`),
+            // (a share with no check points comes back empty from the server: that is 0%, not unknown)
+            c.edge && c.edge_checked_at && fmtProp('edge with no mapped barrier', `${c.edge_gap_pct ?? 0}%`),
+            c.edge && c.edge_checked_at && fmtProp('edge with only unverified barriers', `${c.edge_uncertain_pct ?? 0}%`),
+            c.edge && c.edge_checked_at && fmtProp('edge with a checked barrier', `${c.edge_protected_pct ?? 0}%`),
           ].filter(Boolean).join('');
           return `<b>${esc(c.code)}</b> · ${esc(c.block)}<table style="margin-top:4px;font-size:12px">${rows}</table>${p.risk_basis ? `<div style="margin-top:4px;font-size:11px;color:#475569">Risk basis: ${esc(String(p.risk_basis))}</div>` : ''}`;
       };

@@ -27,6 +27,7 @@ import { radioDigits } from '../core/coords';
 import { metaGet, metaSet } from '../core/db';
 import { markAnnounced, pickSatAlerts, pixelHalfM, satName, satTime, satWhere, type Announced } from '../core/satAlerts';
 import type { Detection } from '../core/types';
+import { barrierSentence } from '../../supabase/functions/_shared/barriers';
 
 // Four tabs: where things are, what is burning, who is out, and settings.
 // Navigate and Perimeter open from a fire (card, list or details), so they are not tabs.
@@ -163,6 +164,7 @@ function SatFireAlert() {
             <div class="min-w-0">
               <div class="font-display text-[18px] leading-tight">Satellite fire detection {satWhere(d)}</div>
               <div class="text-[14px] opacity-90 mt-1">{satName(d.source)} pass {satTime(d.acq_time)} · {ago(d.acq_time)} · {d.confidence} confidence · ±{pixelHalfM(d.source)} m</div>
+              {d.barriers && d.barriers.status !== 'inside' && <div data-testid="sat-alert-barriers" class="text-[14px] mt-1">{barrierSentence(d.barriers, d.compartment)}</div>}
               <div class="text-[13px] opacity-80 mt-0.5">Unverified: check before calling crews.{urgent.length > 1 ? ` +${urgent.length - 1} more within 1 km.` : ''}</div>
             </div>
           </div>

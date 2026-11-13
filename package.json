@@ -14,7 +14,9 @@
     "seed:demo": "node --experimental-strip-types scripts/gen-demo-seed.mjs",
     "build:demo": "tsc --noEmit && vite build --mode demo",
     "load:layers": "node scripts/load-layers.mjs",
-    "port:layers": "python scripts/port_fire_layers.py"
+    "port:layers": "python scripts/port_fire_layers.py",
+    "load:barriers": "node scripts/load-barriers.mjs",
+    "barriers:convert": "node scripts/barrier-sources.mjs"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",
