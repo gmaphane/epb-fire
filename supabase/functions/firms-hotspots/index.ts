@@ -121,6 +121,12 @@ Deno.serve(async (req) => {
     }
   }
   if (errors.length) console.error(JSON.stringify({ firms_errors: errors }));
+  // feed health for the app: "no detections" only means something if the check actually worked
+  const sourceFailures = errors.filter((e) => SOURCES.some((s) => e.startsWith(s))).length;
+  const ok = sourceFailures < SOURCES.length && !errors.some((e) => e.startsWith('lookup') || e.startsWith('insert'));
+  const nowIso = new Date().toISOString();
+  await sb.from('feed_status').upsert({ id: 'firms', last_attempt: nowIso, ...(ok ? { last_ok: nowIso } : {}),
+    detail: errors.length ? errors.join('; ').slice(0, 300) : `${all.size} detections in the last ${DAYS} days, ${fresh.length} new` }, { onConflict: 'id' });
 
   // 3) alerts: the block's fire danger today, and repeats of the same fire in the last 24 h
   const today = new Date().toISOString().slice(0, 10);

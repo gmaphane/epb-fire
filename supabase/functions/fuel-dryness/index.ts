@@ -174,6 +174,9 @@ async function run(runId: string, trigger: string, offset: number) {
     for (const m of mine ?? []) by[m.cadence as string] = (by[m.cadence as string] ?? 0) + 1;
     const { data: prev } = await sb.from('dryness_runs').select('errors').eq('id', runId).single();
     const nErr = ((prev?.errors as unknown[] | null) ?? []).length + errors.length;
+    const nowIso = new Date().toISOString();
+    await sb.from('feed_status').upsert({ id: 'dryness', last_attempt: nowIso, ...((mine ?? []).length ? { last_ok: nowIso } : {}),
+      detail: `${(mine ?? []).length} areas measured${nErr ? `, ${nErr} errors` : ''}` }, { onConflict: 'id' });
     await note({
       finished_at: new Date().toISOString(), status: nErr ? ((mine ?? []).length ? 'partial' : 'failed') : 'ok', trigger,
       zones: (mine ?? []).length, unknown: (mine ?? []).filter((m) => m.class === 'unknown').length, by_cadence: by,

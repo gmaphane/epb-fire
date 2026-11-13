@@ -4,6 +4,7 @@ import { CONFIG } from '../config';
 import type { AppState } from '../core/store';
 import type { FuelDryness, GpsFix, Incident, Vertex } from '../core/types';
 import { drynessStale, type DrynessClass } from '../../supabase/functions/_shared/dryness';
+import { rateCompartment, riskParams, type Rating, type RiskResult } from '../core/compartmentRisk';
 import { STATUS_LABEL, can } from '../core/flow';
 
 /**
@@ -133,6 +134,28 @@ const checkButton = (s: MapData, b: BarrierRef) =>
   s.me && can(s.me.role, 'respond')
     ? `<button data-barrier-id="${esc(b.id)}" data-barrier-name="${esc(b.name)}" data-barrier-kind="${esc(b.kind)}" style="margin-top:8px;width:100%;min-height:40px;border-radius:9999px;background:#2B2D42;color:#fff;font:600 13px inherit;border:0">Record field check</button>`
     : '';
+/** Fire risk rating colours (Stage 4). Unknown = not enough current data, never "low". */
+export const RATING_STYLE: Record<Rating, { c: string; label: string }> = {
+  low: { c: '#4ADE80', label: 'Low' },
+  moderate: { c: '#FDE047', label: 'Moderate' },
+  high: { c: '#FB923C', label: 'High' },
+  extreme: { c: '#D90429', label: 'Extreme' },
+  unknown: { c: '#94A3B8', label: 'Unknown' },
+};
+const agoShort = (iso: string | null) => {
+  if (!iso) return 'never';
+  const h = (Date.now() - Date.parse(iso)) / 3600e3;
+  return h < 1 ? `${Math.max(1, Math.round(h * 60))} min ago` : h < 48 ? `${Math.round(h)} h ago` : `${Math.round(h / 24)} days ago`;
+};
+/** Rating with every driver: what was found, its score (0–3 or ?), and when that data was last updated. */
+function riskHtml(r: RiskResult | undefined): string {
+  if (!r) return '';
+  const st = RATING_STYLE[r.rating];
+  const rows = r.drivers.filter((d) => d.applies).map((d) =>
+    `<tr><td style="color:#475569;padding:1px 8px 1px 0;vertical-align:top">${esc(d.label)}</td><td style="vertical-align:top"><b>${d.score == null ? '?' : d.score}</b>/3 · ${esc(d.value)}<div style="font-size:10.5px;color:${d.stale ? '#B91C1C' : '#64748B'}">${d.stale ? 'OLD / MISSING DATA · ' : ''}updated ${agoShort(d.updated)}</div></td></tr>`).join('');
+  return `<div data-testid="risk-popup" style="margin:6px 0 4px;padding:6px 8px;border-radius:10px;background:${st.c}22;border:1px solid ${st.c}"><div style="font-weight:700;font-size:13px">Fire risk: <span style="color:${r.rating === 'moderate' ? '#854D0E' : r.rating === 'low' ? '#166534' : st.c}">${st.label.toUpperCase()}</span></div><div style="font-size:11px;color:#475569">${esc(r.why)}</div><table style="margin-top:4px;font-size:11.5px">${rows}</table></div>`;
+}
+
 /** Fuel dryness classes (NDMI from Sentinel-2): moist green → very dry red; unknown grey. */
 export const DRYNESS_STYLE: Record<DrynessClass, { c: string; label: string }> = {
   low: { c: '#4ADE80', label: 'Low' },
@@ -173,7 +196,7 @@ const CREW_STYLE: Record<string, { c: string; label: string; p: string }> = {
 export interface RouteLine { coords: [number, number][]; primary?: boolean }
 
 /** The slices of app state the map draws. */
-export type MapData = Pick<AppState, 'incidents' | 'assets' | 'compartments' | 'roads' | 'detections' | 'hazards' | 'perimeters' | 'mapLayers' | 'layers' | 'crewPositions' | 'crews' | 'me'> & Partial<Pick<AppState, 'fuelDryness'>>;
+export type MapData = Pick<AppState, 'incidents' | 'assets' | 'compartments' | 'roads' | 'detections' | 'hazards' | 'perimeters' | 'mapLayers' | 'layers' | 'crewPositions' | 'crews' | 'me'> & Partial<Pick<AppState, 'fuelDryness' | 'fireDanger' | 'feedStatus' | 'riskConfig'>>;
 
 export interface RenderOpts {
   selectedId?: string | null;
@@ -200,7 +223,7 @@ export class MapController {
   constructor(el: HTMLElement, center = CONFIG.center, zoom = 14) {
     // tolerance: a finger can hit a 3 px road or firebreak line (for field checks) without pixel-perfect aim
     this.map = L.map(el, { zoomControl: false, attributionControl: true, preferCanvas: true, renderer: L.canvas({ tolerance: 6 }), zoomSnap: 0.5 }).setView([center.lat, center.lon], zoom);
-    for (const k of ['compartments', 'dryness', 'overlayPoly', 'roads', 'overlayLine', 'spread', 'compLabels', 'routes', 'assets', 'crews', 'detections', 'hazards', 'perimeters', 'incidents', 'extra']) this.g[k] = L.layerGroup().addTo(this.map);
+    for (const k of ['compartments', 'riskRating', 'dryness', 'overlayPoly', 'roads', 'overlayLine', 'spread', 'compLabels', 'routes', 'assets', 'crews', 'detections', 'hazards', 'perimeters', 'incidents', 'extra']) this.g[k] = L.layerGroup().addTo(this.map);
     // label visibility and collisions depend on zoom
     this.map.on('zoomend', () => { if (this.last) { this.renderAssets(this.last.s, this.last.o); this.renderCompLabels(this.last.s); this.renderCrews(this.last.s); } });
     this.map.attributionControl.setPrefix('');
@@ -439,6 +462,7 @@ export class MapController {
     if (ch('mapLayers', 'layers', 'me')) this.renderOverlays(s);
     if (ch('compartments', 'layers', 'fuelDryness')) { this.renderCompartments(s); this.renderCompLabels(s); }
     if (ch('fuelDryness', 'compartments', 'mapLayers', 'layers')) this.renderDryness(s);
+    if (ch('fuelDryness', 'compartments', 'detections', 'fireDanger', 'feedStatus', 'riskConfig', 'layers')) this.renderRisk(s);
     if (ch('roads', 'layers', 'me')) this.renderRoads(s);
     if (ch('crewPositions', 'crews', 'layers', 'me', 'incidents')) this.renderCrews(s);
     if (ch('assets', 'layers', 'incidents')) this.renderAssets(s, o);
@@ -484,6 +508,38 @@ export class MapController {
     for (const c of s.compartments) { const d = by.get('compartment|' + c.code); if (d) draw(c.geojson, d, c.code, false); }
   }
 
+  /** Ratings for every compartment, recomputed when any input changes or at most once a minute (ages move on). */
+  private riskCache: { keys: unknown[]; t: number; map: Map<string, RiskResult> } | null = null;
+  ratings(s: MapData): Map<string, RiskResult> {
+    const keys = [s.compartments, s.fuelDryness, s.detections, s.fireDanger, s.feedStatus, s.riskConfig];
+    const c = this.riskCache;
+    if (c && c.keys.every((k, i) => k === keys[i]) && Date.now() - c.t < 60_000) return c.map;
+    const params = riskParams(s.riskConfig?.find((r) => r.id === 'site')?.params);
+    const dry = new Map((s.fuelDryness ?? []).map((d) => [d.id, d]));
+    const recent = s.detections.filter((d) => Date.now() - Date.parse(d.acq_time) < params.detections.km5_h * 3600e3);
+    const map = new Map<string, RiskResult>();
+    for (const cp of s.compartments) {
+      map.set(cp.code, rateCompartment({ compartment: cp, dryIn: dry.get('compartment|' + cp.code), dryOut: dry.get('edge_zone|' + cp.code),
+        detections: recent, danger: s.fireDanger ?? [], feeds: s.feedStatus ?? [], params }));
+    }
+    this.riskCache = { keys, t: Date.now(), map };
+    return map;
+  }
+
+  /** Fire risk rating layer: compartments filled by rating; unknown grey and dashed. */
+  private renderRisk(s: MapData) {
+    const g = this.g.riskRating;
+    g.clearLayers();
+    if (!s.layers.risk_rating) return;
+    const rs = this.ratings(s);
+    for (const c of s.compartments) {
+      const r = rs.get(c.code);
+      if (!r) continue;
+      const st = RATING_STYLE[r.rating];
+      L.geoJSON(c.geojson as any, { style: { color: st.c, weight: 1.6, opacity: 1, dashArray: r.rating === 'unknown' ? '4 4' : undefined, fillColor: st.c, fillOpacity: r.rating === 'unknown' ? 0.1 : 0.45 }, interactive: false } as any).addTo(g);
+    }
+  }
+
   private renderCompartments(s: MapData) {
     this.g.compartments.clearLayers();
     if (!s.layers.compartments) return;
@@ -495,7 +551,7 @@ export class MapController {
           const rows = [
             p.area_ha != null && fmtProp('area', `${p.area_ha} ha`),
             p.yop_youngest != null && fmtProp('planted', `${p.yop_youngest}${p.yop_oldest != null && p.yop_oldest !== p.yop_youngest ? ` (oldest ${p.yop_oldest})` : ''}`),
-            fmtProp('risk', `${r.label}${c.risk_score != null ? ` (${c.risk_score})` : ''}`),
+            fmtProp('planning baseline (2025 FMP zones)', `${r.label}${c.risk_score != null ? ` (${c.risk_score})` : ''}`),
             p.hrz_overlap_pct != null && fmtProp('in FMP high-risk zone', `${p.hrz_overlap_pct}%`),
             p.burnt_2024_field_ha != null && fmtProp('burnt 2024 (field)', `${p.burnt_2024_field_ha} ha`),
             p.burnt_2023_24_s2_ha != null && fmtProp('burnt 2023/24 (Sentinel-2)', `${p.burnt_2023_24_s2_ha} ha`),
@@ -508,12 +564,12 @@ export class MapController {
             c.edge && c.edge_checked_at && fmtProp('edge with only unverified barriers', `${c.edge_uncertain_pct ?? 0}%`),
             c.edge && c.edge_checked_at && fmtProp('edge with a checked barrier', `${c.edge_protected_pct ?? 0}%`),
           ].filter(Boolean).join('');
-          return `<b>${esc(c.code)}</b> · ${esc(c.block)}<table style="margin-top:4px;font-size:12px">${rows}</table>${p.risk_basis ? `<div style="margin-top:4px;font-size:11px;color:#475569">Risk basis: ${esc(String(p.risk_basis))}</div>` : ''}`;
+          return `<b>${esc(c.code)}</b> · ${esc(c.block)}${riskHtml(this.ratings(this.last?.s ?? s).get(c.code))}<table style="margin-top:4px;font-size:12px">${rows}</table>${p.risk_basis ? `<div style="margin-top:4px;font-size:11px;color:#475569">Risk basis: ${esc(String(p.risk_basis))}</div>` : ''}`;
       };
       // A tap inside a compartment shows its details, unless the screen is placing something
       // (fire pin, measuring, moving a pin): then the tap goes to the screen like any map tap.
       L.geoJSON(c.geojson as any, { style: { color: r.c, weight: r.w, opacity: 1, fillColor: r.c, fillOpacity: r.f }, bubblingMouseEvents: false } as any)
-        .bindTooltip(esc(`${c.code} · ${r.label} risk`), { permanent: false, direction: 'center' })
+        .bindTooltip(esc(`${c.code} · baseline ${r.label}`), { permanent: false, direction: 'center' })
         .on('click', (e: L.LeafletMouseEvent) => {
           if (this.pick && this.clickHandler) this.clickHandler(e);
           else L.popup().setLatLng(e.latlng).setContent(info()).openOn(this.map);

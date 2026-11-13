@@ -338,6 +338,21 @@ export interface FuelDryness {
   updated_at?: string;
 }
 
+/** When each server data feed last ran and last succeeded (so the app can show "data last updated" and stale warnings). */
+export interface FeedStatus {
+  id: 'firms' | 'dryness' | string;
+  last_attempt: string | null;
+  last_ok: string | null;
+  detail: string;
+  updated_at?: string;
+}
+/** Settings for the fire-risk analysis (one row, id 'site'); the app reads params.risk and params.dryness. */
+export interface RiskConfig {
+  id: string;
+  params: Record<string, unknown>;
+  updated_at?: string;
+}
+
 /** Tables replicated between device and server. */
 export const TABLES = [
   'incidents',
@@ -357,6 +372,8 @@ export const TABLES = [
   'fire_danger',
   'barrier_checks',
   'fuel_dryness',
+  'feed_status',
+  'risk_config',
 ] as const;
 export type TableName = (typeof TABLES)[number];
 

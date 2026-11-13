@@ -26,8 +26,8 @@ let _db: Promise<IDBPDatabase> | null = null;
 
 export function db(): Promise<IDBPDatabase> {
   if (!_db) {
-    // v2 adds map_layers, v3 crew_positions, v4 fire_danger, v5 barrier_checks, v6 fuel_dryness. Upgrades only create stores that are missing, so data on the phone is kept.
-    _db = openDB(DB_NAME, 6, {
+    // v2 adds map_layers, v3 crew_positions, v4 fire_danger, v5 barrier_checks, v6 fuel_dryness, v7 feed_status + risk_config. Upgrades only create stores that are missing, so data on the phone is kept.
+    _db = openDB(DB_NAME, 7, {
       upgrade(d) {
         for (const t of TABLES) if (!d.objectStoreNames.contains(t)) d.createObjectStore(t, { keyPath: 'id' });
         if (!d.objectStoreNames.contains('outbox')) {

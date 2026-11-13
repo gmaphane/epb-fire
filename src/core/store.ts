@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getAll, metaGet, onDbChange } from './db';
 import type {
-  Asset, Assignment, BarrierCheck, Compartment, FuelDryness, Crew, CrewPosition, FireDanger, Detection, Hazard, Incident, IncidentEvent, MapLayer, Me, Perimeter, PhotoRow, Readiness, Road, TableName,
+  Asset, Assignment, BarrierCheck, Compartment, FeedStatus, FuelDryness, RiskConfig, Crew, CrewPosition, FireDanger, Detection, Hazard, Incident, IncidentEvent, MapLayer, Me, Perimeter, PhotoRow, Readiness, Road, TableName,
 } from './types';
 import type { SyncState } from './sync';
 import type { Presence } from './presence';
@@ -26,6 +26,8 @@ export interface AppState {
   mapLayers: MapLayer[];
   barrierChecks: BarrierCheck[];
   fuelDryness: FuelDryness[];
+  feedStatus: FeedStatus[];
+  riskConfig: RiskConfig[];
   sync: SyncState | null;
   toast: { text: string; kind: 'ok' | 'warn' | 'err'; id: number } | null;
   theme: 'auto' | 'day' | 'night';
@@ -41,7 +43,7 @@ const initial: AppState = {
   booted: false,
   me: null,
   incidents: [], events: [], assignments: [], perimeters: [], photos: [], hazards: [], detections: [],
-  assets: [], compartments: [], roads: [], crews: [], crewPositions: [], fireDanger: [], readiness: null, mapLayers: [], barrierChecks: [], fuelDryness: [],
+  assets: [], compartments: [], roads: [], crews: [], crewPositions: [], fireDanger: [], readiness: null, mapLayers: [], barrierChecks: [], fuelDryness: [], feedStatus: [], riskConfig: [],
   sync: null,
   toast: null,
   theme: 'auto',
@@ -91,7 +93,7 @@ export function useStore<T>(sel: (s: AppState) => T): T {
 const KEY: Record<TableName, keyof AppState> = {
   incidents: 'incidents', incident_events: 'events', assignments: 'assignments', perimeters: 'perimeters',
   photos: 'photos', hazards: 'hazards', detections: 'detections', assets: 'assets', compartments: 'compartments',
-  roads: 'roads', crews: 'crews', readiness: 'readiness', map_layers: 'mapLayers', crew_positions: 'crewPositions', fire_danger: 'fireDanger', barrier_checks: 'barrierChecks', fuel_dryness: 'fuelDryness',
+  roads: 'roads', crews: 'crews', readiness: 'readiness', map_layers: 'mapLayers', crew_positions: 'crewPositions', fire_danger: 'fireDanger', barrier_checks: 'barrierChecks', fuel_dryness: 'fuelDryness', feed_status: 'feedStatus', risk_config: 'riskConfig',
 };
 
 async function load(t: TableName) {
