@@ -1,6 +1,8 @@
 -- Fuel dryness: send Copernicus valid shapes. Converting to UTM and rounding to 0.1 m made some shapes (A048, two
 -- edge zones) self-intersect, which the Statistical API rejects (COMMON_BAD_PAYLOAD, input->bounds->geometry).
--- Now: convert, repair (ST_MakeValid), keep polygons only, and write 2 decimals (1 cm).
+-- Now: convert, repair (ST_MakeValid), round to 1 cm with ST_ReducePrecision (which keeps the result valid; plain
+-- snapping left A048, whose parts touch at a corner, self-intersecting), keep polygons only, write 2 decimals.
+-- Checked 13 Nov 2026: all 160 zones valid after the GeoJSON round trip; total area changes by 89 m² in 290 km².
 -- Run in the Supabase SQL Editor. Safe to run twice.
 set search_path = public, extensions;
 
@@ -14,7 +16,7 @@ language sql stable security definer set search_path = public, extensions as $$
     from public.map_layers m left join public.compartments c on c.code = m.props->>'compartment'
     where m.layer = 'edge_zone' and m.geom is not null
   ), v as (
-    select id, zone_kind, compartment, block, st_multi(st_collectionextract(st_makevalid(st_snaptogrid(g, 0.01)), 3)) as g from z
+    select id, zone_kind, compartment, block, st_multi(st_collectionextract(st_reduceprecision(st_makevalid(g), 0.01), 3)) as g from z
   )
   select id, zone_kind, compartment, block, st_area(g), st_asgeojson(g, 2)::jsonb
   from v where not st_isempty(g) $$;
