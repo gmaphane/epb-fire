@@ -2,7 +2,8 @@ import L from 'leaflet';
 import { basemap } from '../core/tiles';
 import { CONFIG } from '../config';
 import type { AppState } from '../core/store';
-import type { GpsFix, Incident, Vertex } from '../core/types';
+import type { FuelDryness, GpsFix, Incident, Vertex } from '../core/types';
+import { drynessStale, type DrynessClass } from '../../supabase/functions/_shared/dryness';
 import { STATUS_LABEL, can } from '../core/flow';
 
 /**
@@ -132,6 +133,28 @@ const checkButton = (s: MapData, b: BarrierRef) =>
   s.me && can(s.me.role, 'respond')
     ? `<button data-barrier-id="${esc(b.id)}" data-barrier-name="${esc(b.name)}" data-barrier-kind="${esc(b.kind)}" style="margin-top:8px;width:100%;min-height:40px;border-radius:9999px;background:#2B2D42;color:#fff;font:600 13px inherit;border:0">Record field check</button>`
     : '';
+/** Fuel dryness classes (NDMI from Sentinel-2): moist green → very dry red; unknown grey. */
+export const DRYNESS_STYLE: Record<DrynessClass, { c: string; label: string }> = {
+  low: { c: '#4ADE80', label: 'Low' },
+  moderate: { c: '#FDE047', label: 'Moderate' },
+  high: { c: '#FB923C', label: 'High' },
+  extreme: { c: '#B91C1C', label: 'Extreme' },
+  unknown: { c: '#94A3B8', label: 'Unknown' },
+};
+const fmtDay = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+export const fmtWindow = (d: Pick<FuelDryness, 'window_from' | 'window_to'>) => (d.window_from && d.window_to ? `${fmtDay(d.window_from)}–${fmtDay(d.window_to)}` : '—');
+function drynessRows(s: MapData, code: string): string[] {
+  const out: string[] = [];
+  for (const [kind, label] of [['compartment', 'fuel dryness'], ['edge_zone', 'fuel dryness 2 km outside']] as const) {
+    const d = s.fuelDryness?.find((x) => x.id === `${kind}|${code}`);
+    if (!d) continue;
+    const v = d.class === 'unknown' ? `Unknown (too cloudy, ${Math.round(d.usable_pct ?? 0)}% clear)` : `${DRYNESS_STYLE[d.class].label} · NDMI ${d.ndmi_p50?.toFixed(2)} · ${fmtWindow(d)}`;
+    out.push(fmtProp(label, v + (drynessStale(d.computed_at) ? ' · OLD' : '')));
+  }
+  const fl = s.fuelDryness?.find((x) => x.id === `compartment|${code}`)?.fuel_load_t_ha;
+  if (fl != null) out.push(fmtProp('fuel load', `${fl} t/ha`));
+  return out;
+}
 const POLY_LAYERS = ['high_risk_zone', 'burnt_area', 'camera_coverage', 'plantain_farm', 'estate_boundary'];
 const CASED = new Set(['firebreak', 'standby_route']);
 const fmtProp = (k: string, v: unknown) => `<tr><td style="color:#475569;padding-right:8px">${esc(k.replace(/_/g, ' '))}</td><td><b>${esc(String(v))}</b></td></tr>`;
@@ -150,7 +173,7 @@ const CREW_STYLE: Record<string, { c: string; label: string; p: string }> = {
 export interface RouteLine { coords: [number, number][]; primary?: boolean }
 
 /** The slices of app state the map draws. */
-export type MapData = Pick<AppState, 'incidents' | 'assets' | 'compartments' | 'roads' | 'detections' | 'hazards' | 'perimeters' | 'mapLayers' | 'layers' | 'crewPositions' | 'crews' | 'me'>;
+export type MapData = Pick<AppState, 'incidents' | 'assets' | 'compartments' | 'roads' | 'detections' | 'hazards' | 'perimeters' | 'mapLayers' | 'layers' | 'crewPositions' | 'crews' | 'me'> & Partial<Pick<AppState, 'fuelDryness'>>;
 
 export interface RenderOpts {
   selectedId?: string | null;
@@ -177,7 +200,7 @@ export class MapController {
   constructor(el: HTMLElement, center = CONFIG.center, zoom = 14) {
     // tolerance: a finger can hit a 3 px road or firebreak line (for field checks) without pixel-perfect aim
     this.map = L.map(el, { zoomControl: false, attributionControl: true, preferCanvas: true, renderer: L.canvas({ tolerance: 6 }), zoomSnap: 0.5 }).setView([center.lat, center.lon], zoom);
-    for (const k of ['compartments', 'overlayPoly', 'roads', 'overlayLine', 'spread', 'compLabels', 'routes', 'assets', 'crews', 'detections', 'hazards', 'perimeters', 'incidents', 'extra']) this.g[k] = L.layerGroup().addTo(this.map);
+    for (const k of ['compartments', 'dryness', 'overlayPoly', 'roads', 'overlayLine', 'spread', 'compLabels', 'routes', 'assets', 'crews', 'detections', 'hazards', 'perimeters', 'incidents', 'extra']) this.g[k] = L.layerGroup().addTo(this.map);
     // label visibility and collisions depend on zoom
     this.map.on('zoomend', () => { if (this.last) { this.renderAssets(this.last.s, this.last.o); this.renderCompLabels(this.last.s); this.renderCrews(this.last.s); } });
     this.map.attributionControl.setPrefix('');
@@ -414,7 +437,8 @@ export class MapController {
     this.last = { s, o };
     const ch = (...keys: (keyof MapData)[]) => !p || keys.some((k) => p[k] !== s[k]);
     if (ch('mapLayers', 'layers', 'me')) this.renderOverlays(s);
-    if (ch('compartments', 'layers')) { this.renderCompartments(s); this.renderCompLabels(s); }
+    if (ch('compartments', 'layers', 'fuelDryness')) { this.renderCompartments(s); this.renderCompLabels(s); }
+    if (ch('fuelDryness', 'compartments', 'mapLayers', 'layers')) this.renderDryness(s);
     if (ch('roads', 'layers', 'me')) this.renderRoads(s);
     if (ch('crewPositions', 'crews', 'layers', 'me', 'incidents')) this.renderCrews(s);
     if (ch('assets', 'layers', 'incidents')) this.renderAssets(s, o);
@@ -441,6 +465,25 @@ export class MapController {
     }
   }
 
+  /** Fuel dryness (Sentinel-2): compartments filled by class, their 2 km edge zones lighter. Unknown = grey, dashed. */
+  private renderDryness(s: MapData) {
+    const g = this.g.dryness;
+    g.clearLayers();
+    if (!s.layers.dryness || !s.fuelDryness?.length) return;
+    const by = new Map(s.fuelDryness.map((d) => [d.id, d]));
+    const tip = (code: string, d: FuelDryness, outer: boolean) =>
+      `${code}${outer ? ' · 2 km outside' : ''} · fuel dryness ${DRYNESS_STYLE[d.class].label}` +
+      (d.class === 'unknown' ? ' (too cloudy)' : ` · NDMI ${d.ndmi_p50?.toFixed(2)} · ${fmtWindow(d)} · ${Math.round(d.usable_pct ?? 0)}% clear`) +
+      (drynessStale(d.computed_at) ? ' · OLD DATA' : '');
+    const draw = (geo: GeoJSON.Geometry, d: FuelDryness, code: string, outer: boolean) => {
+      const st = DRYNESS_STYLE[d.class];
+      L.geoJSON(geo as any, { style: { color: st.c, weight: outer ? 0.8 : 1.2, opacity: 0.9, dashArray: d.class === 'unknown' ? '4 4' : undefined, fillColor: st.c, fillOpacity: d.class === 'unknown' ? 0.08 : outer ? 0.22 : 0.42 }, interactive: true } as any)
+        .bindTooltip(esc(tip(code, d, outer)), { sticky: true }).addTo(g);
+    };
+    for (const m of s.mapLayers) if (m.layer === 'edge_zone') { const code = String(m.props?.compartment ?? ''); const d = by.get('edge_zone|' + code); if (d) draw(m.geojson, d, code, true); }
+    for (const c of s.compartments) { const d = by.get('compartment|' + c.code); if (d) draw(c.geojson, d, c.code, false); }
+  }
+
   private renderCompartments(s: MapData) {
     this.g.compartments.clearLayers();
     if (!s.layers.compartments) return;
@@ -460,6 +503,7 @@ export class MapController {
             c.treatment_status && fmtProp('treatment', c.treatment_status),
             c.edge && fmtProp('estate edge', `${((c.edge_length_m ?? 0) / 1000).toFixed(1)} km`),
             // (a share with no check points comes back empty from the server: that is 0%, not unknown)
+            ...drynessRows(s, c.code),
             c.edge && c.edge_checked_at && fmtProp('edge with no mapped barrier', `${c.edge_gap_pct ?? 0}%`),
             c.edge && c.edge_checked_at && fmtProp('edge with only unverified barriers', `${c.edge_uncertain_pct ?? 0}%`),
             c.edge && c.edge_checked_at && fmtProp('edge with a checked barrier', `${c.edge_protected_pct ?? 0}%`),

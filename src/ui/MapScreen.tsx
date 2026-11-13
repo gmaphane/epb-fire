@@ -4,7 +4,7 @@ import L from 'leaflet';
 import { getState, setState, toast, useStore } from '../core/store';
 import { gps } from '../core/gps';
 import { CONFIG } from '../config';
-import { EDGE_GAP_STYLE, MapController, RISK, type BarrierRef, type RouteLine } from './mapview';
+import { DRYNESS_STYLE, EDGE_GAP_STYLE, fmtWindow, MapController, RISK, type BarrierRef, type RouteLine } from './mapview';
 import { BarrierCheckSheet } from './BarrierCheckSheet';
 import { Button, Choice, CoordReadout, NorthDial, RailButton, SatChip, Sheet, StatusChip, SyncChip, cx } from './kit';
 import { fmtDistance, haversineM, toUtm30 } from '../core/geo';
@@ -17,7 +17,8 @@ import { isOpen } from '../core/flow';
 import { metaSet } from '../core/db';
 import { fmtEta, route, type Mode, type Route } from '../core/route';
 import { isStale, setPresence, stopResponding } from '../core/presence';
-import type { Incident } from '../core/types';
+import type { FuelDryness, Incident } from '../core/types';
+import { drynessStale, type DrynessClass } from '../../supabase/functions/_shared/dryness';
 import { compass8, useWeather, wxAge, type Weather } from '../core/weather';
 import { spreadEllipse, threats, type Threat } from '../core/spread';
 import { SpreadPanel, WindArrow } from './SpreadPanel';
@@ -30,6 +31,7 @@ const LAYERS: { k: string; label: string; swatch: string }[] = [
   { k: 'compartments', label: 'Compartments', swatch: 'risk' },
   { k: 'roads', label: 'Roads & tracks', swatch: 'line:#F8FAFC' },
   { k: 'firebreak', label: 'Firebreaks', swatch: 'dash:#F8FAFC' },
+  { k: 'dryness', label: 'Fuel dryness (satellite)', swatch: 'dot:#FB923C' },
   { k: 'edge_gap', label: 'Estate edge gaps', swatch: 'line:#EF233C' },
   { k: 'plantain_farm', label: 'Plantain farms', swatch: 'dot:#84CC16' },
   { k: 'water', label: 'Water points', swatch: 'dot:#2563EB' },
@@ -38,6 +40,26 @@ const LAYERS: { k: string; label: string; swatch: string }[] = [
   { k: 'crews', label: 'Crews (live)', swatch: 'ring:#2563EB' },
   { k: 'detections', label: 'Satellite fire detections', swatch: 'diamond:#C026D3' },
 ];
+
+/** Legend for the fuel dryness layer: classes, which satellite images (dates, clear share), and a warning when old. */
+function DrynessLegend({ rows }: { rows: FuelDryness[] }) {
+  if (!rows.length) return <div class="px-2 pt-2 mt-1 border-t border-line text-[11px] text-muted" data-testid="dryness-legend">No dryness data yet (first satellite run pending).</div>;
+  const latest = rows.reduce((a, b) => (a.computed_at > b.computed_at ? a : b));
+  const stale = drynessStale(latest.computed_at);
+  const known = rows.filter((r) => r.class !== 'unknown');
+  const weekly = rows.filter((r) => r.cadence === 'weekly').length;
+  const passes = [...new Set(rows.flatMap((r) => r.images.map((i) => i.date)))].sort().reverse().slice(0, 4);
+  return (
+    <div class="px-2 pt-2 mt-1 border-t border-line text-[11px] text-muted space-y-1" data-testid="dryness-legend">
+      <div class="flex items-center justify-between gap-1">
+        {(Object.keys(DRYNESS_STYLE) as DrynessClass[]).map((k) => <span key={k} class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-[3px]" style={{ background: DRYNESS_STYLE[k].c }} />{DRYNESS_STYLE[k].label}</span>)}
+      </div>
+      <div>Sentinel-2, {fmtWindow(latest)} · passes {passes.map((d) => d.slice(8, 10) + '/' + d.slice(5, 7)).join(', ') || '—'}</div>
+      <div>{known.length}/{rows.length} areas measured · {weekly} from the last week, {rows.length - known.length} too cloudy (unknown)</div>
+      {stale && <div class="text-fire font-semibold" data-testid="dryness-stale">Old data: last run {ago(latest.computed_at)}. Treat as unknown.</div>}
+    </div>
+  );
+}
 
 function Swatch({ s }: { s: string }) {
   if (s === 'risk')
@@ -56,7 +78,7 @@ export function MapScreen() {
   const s = useStore((x) => ({
     incidents: x.incidents, assets: x.assets, compartments: x.compartments, roads: x.roads, detections: x.detections, hazards: x.hazards,
     perimeters: x.perimeters, mapLayers: x.mapLayers, layers: x.layers, crewPositions: x.crewPositions, crews: x.crews, me: x.me,
-    presence: x.presence, readiness: x.readiness, fireDanger: x.fireDanger, basemap: x.basemap, mapFocus: x.mapFocus,
+    presence: x.presence, readiness: x.readiness, fireDanger: x.fireDanger, basemap: x.basemap, mapFocus: x.mapFocus, fuelDryness: x.fuelDryness,
   }));
   const g = useGpsFix();
   const [sel, setSel] = useState<string | null>(null);
@@ -92,7 +114,7 @@ export function MapScreen() {
   useEffect(() => {
     // the controller only rebuilds the layer groups whose data changed
     ctl.current?.render(s, { selectedId: sel, ...handlers });
-  }, [s.incidents, s.assets, s.compartments, s.roads, s.detections, s.hazards, s.perimeters, s.mapLayers, s.layers, s.crewPositions, s.crews, s.me, sel]);
+  }, [s.incidents, s.assets, s.compartments, s.roads, s.detections, s.hazards, s.perimeters, s.mapLayers, s.layers, s.crewPositions, s.crews, s.me, s.fuelDryness, sel]);
   useEffect(() => {
     ctl.current?.setMe(g.fix);
     if (g.fix && !followed.current && !s.mapFocus) {
@@ -267,6 +289,7 @@ export function MapScreen() {
                 </button>
               ))}
             </div>
+            {s.layers.dryness && <DrynessLegend rows={s.fuelDryness} />}
             {s.layers.edge_gap && (
               <div class="px-2 pt-2 mt-1 border-t border-line text-[11px] text-muted space-y-1" data-testid="edge-gap-legend">
                 {Object.entries(EDGE_GAP_STYLE).map(([k, st]) => (

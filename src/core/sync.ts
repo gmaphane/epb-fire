@@ -36,7 +36,7 @@ export interface SyncState {
 
 const OVERLAP_MS = 5000;
 /** Reference tables are edited/deleted on the server (by admins or loaders); phones must mirror deletions. */
-const REFERENCE: TableName[] = ['compartments', 'roads', 'assets', 'map_layers', 'crews', 'detections', 'fire_danger'];
+const REFERENCE: TableName[] = ['compartments', 'roads', 'assets', 'map_layers', 'crews', 'detections', 'fire_danger', 'fuel_dryness'];
 const PRUNE_EVERY_MS = 5 * 60_000; // re-read a little behind the cursor so late-committing rows are not missed
 
 export class SyncEngine {

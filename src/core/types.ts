@@ -1,4 +1,5 @@
 import type { BarrierSummary } from '../../supabase/functions/_shared/barriers';
+import type { DrynessClass } from '../../supabase/functions/_shared/dryness';
 export type Role = 'reporter' | 'responder' | 'coordinator' | 'manager' | 'admin';
 
 export type IncidentStatus =
@@ -315,6 +316,28 @@ export interface BarrierCheck {
   _sync?: SyncState;
 }
 
+/** Weekly fuel dryness (Sentinel-2 NDMI) for a compartment or its 2 km edge zone (server-computed). */
+export interface FuelDryness {
+  id: string; // 'compartment|A016' | 'edge_zone|A016'
+  zone_kind: 'compartment' | 'edge_zone';
+  compartment: string;
+  block: string | null;
+  ndmi_p25: number | null;
+  ndmi_p50: number | null;
+  ndmi_p75: number | null;
+  usable_pct: number | null; // share of the zone with a clear view in the window
+  class: DrynessClass;
+  class_basis: string;
+  window_from: string | null;
+  window_to: string | null;
+  cadence: 'weekly' | 'fortnightly' | 'monthly' | 'none';
+  images: { date: string; cloud_pct: number | null }[];
+  fuel_load_t_ha: number | null; // only where data exist; never guessed
+  fuel_load_source: string | null;
+  computed_at: string;
+  updated_at?: string;
+}
+
 /** Tables replicated between device and server. */
 export const TABLES = [
   'incidents',
@@ -333,6 +356,7 @@ export const TABLES = [
   'crew_positions',
   'fire_danger',
   'barrier_checks',
+  'fuel_dryness',
 ] as const;
 export type TableName = (typeof TABLES)[number];
 
