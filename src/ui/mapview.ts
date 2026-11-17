@@ -200,7 +200,7 @@ const shortValue = (d: Driver, c: Compartment) => {
 const sec = (t: string) => `<div style="margin:10px 0 4px;font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#64748B;text-transform:uppercase">${t}</div>`;
 function compartmentCard(c: Compartment, p: Record<string, unknown>, r: RiskResult | undefined, baseline: string): string {
   const head = `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
-    <div style="font-size:16px;font-weight:700">${esc(c.code)} <span style="font-weight:500;color:#64748B;font-size:13px">· Block ${esc(c.block)}</span></div>
+    <div style="font-size:16px;font-weight:700">${esc(c.code)} <span style="font-weight:500;color:#64748B;font-size:13px">· ${esc(c.block.replace(/^(Block\s*)?/i, 'Block '))}</span></div>
     ${p.area_ha != null ? `<div style="font-size:13px;color:#475569">${esc(String(p.area_ha))} ha</div>` : ''}</div>`;
   let risk = '';
   if (r) {
@@ -276,6 +276,8 @@ export interface RenderOpts {
   onHazard?: (id: string) => void;
   /** "Record field check" tapped in a road / firebreak / stream / plantain farm popup */
   onBarrier?: (b: BarrierRef) => void;
+  /** a compartment tapped: the screen shows its card */
+  onCompartment?: (code: string) => void;
   onMapClick?: (lat: number, lon: number) => void;
 }
 
@@ -624,6 +626,7 @@ export class MapController {
         .bindTooltip(esc(`${c.code} · baseline ${r.label}`), { permanent: false, direction: 'center' })
         .on('click', (e: L.LeafletMouseEvent) => {
           if (this.pick && this.clickHandler) this.clickHandler(e);
+          else if (this.last?.o.onCompartment) this.last.o.onCompartment(c.code);
           else L.popup({ maxWidth: 330, minWidth: 260, maxHeight: Math.round(window.innerHeight * 0.55), autoPanPaddingTopLeft: L.point(12, 150), autoPanPaddingBottomRight: L.point(12, 190) }).setLatLng(e.latlng).setContent(info()).openOn(this.map);
         })
         .addTo(this.g.compartments);

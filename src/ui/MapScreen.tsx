@@ -6,6 +6,7 @@ import { gps } from '../core/gps';
 import { CONFIG } from '../config';
 import { DRYNESS_STYLE, EDGE_GAP_STYLE, fmtWindow, RATING_STYLE, MapController, RISK, type BarrierRef, type RouteLine } from './mapview';
 import { BarrierCheckSheet } from './BarrierCheckSheet';
+import { CompartmentSheet } from './CompartmentSheet';
 import { Button, Choice, CoordReadout, NorthDial, RailButton, SatChip, Sheet, StatusChip, SyncChip, cx } from './kit';
 import { fmtDistance, haversineM, toUtm30 } from '../core/geo';
 import { deleteIncident, moveIncident, resolveHazard } from '../core/actions';
@@ -120,6 +121,7 @@ export function MapScreen() {
   const [sel, setSel] = useState<string | null>(null);
   const [selDet, setSelDet] = useState<string | null>(null);
   const [selHaz, setSelHaz] = useState<string | null>(null);
+  const [selCmp, setSelCmp] = useState<string | null>(null);
   const [barrier, setBarrier] = useState<BarrierRef | null>(null); // field check of a road / firebreak / stream / farm
   const [sheet, setSheet] = useState<'closed' | 'list'>('closed');
   const [panel, setPanel] = useState(false);
@@ -131,7 +133,7 @@ export function MapScreen() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const followed = useRef(false);
 
-  const closeAll = () => { setSel(null); setSelDet(null); setSelHaz(null); setBarrier(null); setSheet('closed'); setPresenceMenu(false); };
+  const closeAll = () => { setSel(null); setSelDet(null); setSelHaz(null); setSelCmp(null); setBarrier(null); setSheet('closed'); setPresenceMenu(false); };
 
   useEffect(() => {
     const c = new MapController(el.current!);
@@ -142,10 +144,11 @@ export function MapScreen() {
   useEffect(() => { ctl.current?.setBasemap(s.basemap); }, [s.basemap]);
   // stable handlers so the map doesn't redraw fire markers just because this screen re-rendered
   const handlers = useMemo(() => ({
-    onIncident: (id: string) => { setSel(id); setSelDet(null); setPanel(false); setPresenceMenu(false); },
-    onDetection: (id: string) => { setSelDet(id); setSel(null); setSelHaz(null); setPanel(false); setPresenceMenu(false); },
-    onHazard: (id: string) => { setSelHaz(id); setSel(null); setSelDet(null); setPanel(false); setPresenceMenu(false); },
-    onBarrier: (b: BarrierRef) => { setBarrier(b); setSel(null); setSelDet(null); setSelHaz(null); setPanel(false); setPresenceMenu(false); },
+    onIncident: (id: string) => { setSel(id); setSelDet(null); setSelCmp(null); setPanel(false); setPresenceMenu(false); },
+    onDetection: (id: string) => { setSelDet(id); setSel(null); setSelHaz(null); setSelCmp(null); setPanel(false); setPresenceMenu(false); },
+    onHazard: (id: string) => { setSelHaz(id); setSel(null); setSelDet(null); setSelCmp(null); setPanel(false); setPresenceMenu(false); },
+    onBarrier: (b: BarrierRef) => { setBarrier(b); setSel(null); setSelDet(null); setSelHaz(null); setSelCmp(null); setPanel(false); setPresenceMenu(false); },
+    onCompartment: (code: string) => { setSelCmp(code); setSel(null); setSelDet(null); setSelHaz(null); setBarrier(null); setSheet('closed'); setPanel(false); setPresenceMenu(false); },
   }), []);
   useEffect(() => {
     // the controller only rebuilds the layer groups whose data changed
@@ -200,6 +203,7 @@ export function MapScreen() {
   const inc = s.incidents.find((i) => i.id === sel);
   const det = s.detections.find((d) => d.id === selDet);
   const haz = s.hazards.find((h) => h.id === selHaz && !h.resolved_at);
+  const cmp = selCmp ? s.compartments.find((c) => c.code === selCmp) : undefined;
 
   // routes: me → every open fire. Re-planned only after moving 50 m with a usable fix, so GPS jitter doesn't flip the
   // route between nearby tracks and make the times jump (step-by-step tracking is on the Navigate screen).
@@ -362,6 +366,8 @@ export function MapScreen() {
                 ? <Button kind="secondary" size="lg" full testid="hazard-remove" icon={<Trash2 size={18} />} onClick={() => void resolveHazard(haz).then(() => { toast('Hazard removed'); setSelHaz(null); }).catch((e) => toast((e as Error).message, 'err'))}>Remove hazard</Button>
                 : <p class="text-[13px] text-muted">Only the person who added it or a coordinator can remove it.</p>}
             </Sheet>
+          ) : cmp ? (
+            <CompartmentSheet c={cmp} r={ctl.current?.ratings(s as any).get(cmp.code)} onClose={() => setSelCmp(null)} />
           ) : det ? (
             <Sheet class="px-5 pb-5 space-y-4" onDown={() => setSelDet(null)}>
               <div class="flex items-start justify-between gap-3">
