@@ -2,9 +2,9 @@ import L from 'leaflet';
 import { basemap } from '../core/tiles';
 import { CONFIG } from '../config';
 import type { AppState } from '../core/store';
-import type { FuelDryness, GpsFix, Incident, Vertex } from '../core/types';
+import type { Compartment, FuelDryness, GpsFix, Incident, Vertex } from '../core/types';
 import { drynessStale, type DrynessClass } from '../../supabase/functions/_shared/dryness';
-import { rateCompartment, riskParams, type Rating, type RiskResult } from '../core/compartmentRisk';
+import { rateCompartment, riskParams, type Driver, type Rating, type RiskResult } from '../core/compartmentRisk';
 import { STATUS_LABEL, can } from '../core/flow';
 
 /**
@@ -178,6 +178,76 @@ function drynessRows(s: MapData, code: string): string[] {
   if (fl != null) out.push(fmtProp('fuel load', `${fl} t/ha`));
   return out;
 }
+
+/* Compartment card (17 Nov 2026): one clear answer first (rating + main concerns), then the five drivers as
+   short rows with 0-3 dots, then history and the estate edge as a bar. Nothing is shown twice. */
+const SHORT: Record<string, string> = {
+  dryness_in: 'Fuel dryness inside', dryness_out: 'Fuel dryness 2 km out', barriers: 'Edge firebreaks',
+  detections: 'Satellite fires', weather: 'Fire weather today',
+};
+const DOT = ['#CBD5E1', '#EAB308', '#F97316', '#DC2626'];
+const dots = (n: number | null) => n == null
+  ? '<span style="color:#64748B;font-size:11px">unknown</span>'
+  : `<span style="letter-spacing:2px;white-space:nowrap">${[1, 2, 3].map((i) => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${i <= n ? DOT[n] : '#E2E8F0'}"></span>`).join(' ')}</span>`;
+const shortValue = (d: Driver, c: Compartment) => {
+  if (d.key === 'barriers' && c.edge_checked_at) {
+    const gap = c.edge_gap_pct ?? 0, unv = c.edge_uncertain_pct ?? 0;
+    return gap > 0 ? `${gap}% with no barrier` : unv > 0 ? `${unv}% not checked` : 'all checked';
+  }
+  if (d.key === 'detections') return d.value.replace('none within 5 km in 7 days', 'none in 7 days');
+  return d.value.replace(/ \(NDMI [^)]*\)/, '');
+};
+const sec = (t: string) => `<div style="margin:10px 0 4px;font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#64748B;text-transform:uppercase">${t}</div>`;
+function compartmentCard(c: Compartment, p: Record<string, unknown>, r: RiskResult | undefined, baseline: string): string {
+  const head = `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+    <div style="font-size:16px;font-weight:700">${esc(c.code)} <span style="font-weight:500;color:#64748B;font-size:13px">· Block ${esc(c.block)}</span></div>
+    ${p.area_ha != null ? `<div style="font-size:13px;color:#475569">${esc(String(p.area_ha))} ha</div>` : ''}</div>`;
+  let risk = '';
+  if (r) {
+    const st = RATING_STYLE[r.rating];
+    const ink = r.rating === 'moderate' ? '#854D0E' : r.rating === 'low' ? '#166534' : r.rating === 'unknown' ? '#334155' : '#FFFFFF';
+    const bg = r.rating === 'moderate' || r.rating === 'low' || r.rating === 'unknown' ? st.c : st.c;
+    const ap = r.drivers.filter((d) => d.applies);
+    const concerns = ap.filter((d) => (d.score ?? 0) >= 1).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+    const stale = ap.filter((d) => d.stale);
+    const main = r.rating === 'unknown' ? 'Not enough current data to rate.'
+      : concerns.length ? `Main concern${concerns.length > 1 ? 's' : ''}: ${concerns.slice(0, 2).map((d) => SHORT[d.key].toLowerCase()).join(' and ')}.`
+      : 'Nothing above low right now.';
+    risk = `<div data-testid="risk-popup" style="margin-top:8px;padding:8px 10px;border-radius:12px;background:${st.c}26;border:1px solid ${st.c}">
+      <div style="display:flex;align-items:center;gap:8px"><span style="background:${bg};color:${ink};font-weight:800;font-size:12px;letter-spacing:.04em;padding:3px 8px;border-radius:999px">${st.label.toUpperCase()}</span><span style="font-weight:600;font-size:13px">fire risk</span></div>
+      <div style="margin-top:4px;font-size:12.5px;color:#1E293B">${esc(main)}</div>
+      ${stale.length ? `<div style="margin-top:2px;font-size:11.5px;color:#B91C1C">Old or missing data: ${esc(stale.map((d) => SHORT[d.key].toLowerCase()).join(', '))}</div>` : ''}
+    </div>`;
+    risk += sec('What drives it') + `<table style="width:100%;font-size:12.5px;border-collapse:collapse">${ap.map((d) =>
+      `<tr><td style="padding:3px 6px 3px 0;color:#334155">${esc(SHORT[d.key])}</td><td style="padding:3px 6px;width:44px">${dots(d.score)}</td><td style="padding:3px 0;text-align:right;color:${d.stale ? '#B91C1C' : '#0F172A'};font-weight:600">${esc(shortValue(d, c))}</td></tr>`).join('')}</table>`;
+  }
+  // history and baseline
+  const burnt = [p.burnt_2024_field_ha != null && `${p.burnt_2024_field_ha} ha in 2024 (field)`,
+    p.burnt_2023_24_s2_ha != null && `${p.burnt_2023_24_s2_ha} ha in 2023/24`,
+    p.burnt_2025_26_s2_ha != null && `${p.burnt_2025_26_s2_ha} ha in 2025/26`].filter(Boolean).join(' · ');
+  const line = (k: string, v: string) => `<tr><td style="padding:2px 8px 2px 0;color:#64748B;vertical-align:top;white-space:nowrap">${esc(k)}</td><td style="padding:2px 0;font-weight:600">${esc(v)}</td></tr>`;
+  const fl = (p as Record<string, unknown>).fuel_load_t_ha;
+  const hist = [
+    burnt && line('Burnt', burnt),
+    line('2025 FMP zone', baseline + (p.hrz_overlap_pct != null ? ` · ${p.hrz_overlap_pct}% in high-risk zone` : '')),
+    p.yop_youngest != null && line('Planted', `${p.yop_youngest}${p.yop_oldest != null && p.yop_oldest !== p.yop_youngest ? ` (oldest ${p.yop_oldest})` : ''}`),
+    fl != null && line('Fuel load', `${fl} t/ha`),
+    c.treatment_status && line('Treatment', String(c.treatment_status)),
+  ].filter(Boolean).join('');
+  let edge = '';
+  if (c.edge) {
+    const km = ((c.edge_length_m ?? 0) / 1000).toFixed(1);
+    if (c.edge_checked_at) {
+      const gap = c.edge_gap_pct ?? 0, unv = c.edge_uncertain_pct ?? 0, ok = c.edge_protected_pct ?? 0;
+      const seg = (w: number, col: string, pat = false) => w > 0 ? `<div style="width:${w}%;background:${pat ? `repeating-linear-gradient(135deg,${col} 0 5px,#FEF3C7 5px 9px)` : col}"></div>` : '';
+      edge = sec(`Estate edge · ${km} km`) + `<div style="display:flex;height:10px;border-radius:5px;overflow:hidden;background:#E2E8F0">${seg(gap, '#DC2626')}${seg(unv, '#F59E0B', true)}${seg(ok, '#16A34A')}</div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11.5px;color:#334155"><span><b style="color:#DC2626">${gap}%</b> no barrier</span><span><b style="color:#B45309">${unv}%</b> not checked</span><span><b style="color:#15803D">${ok}%</b> checked</span></div>`;
+    } else edge = sec(`Estate edge · ${km} km`) + `<div style="font-size:12px;color:#64748B">Barriers along the edge not analysed yet.</div>`;
+  }
+  const foot = [r?.score != null ? `Score ${r.score.toFixed(2)} of 3` : '', p.risk_basis ? `Baseline: ${String(p.risk_basis)}` : ''].filter(Boolean).join(' · ');
+  return `<div style="min-width:250px">${head}${risk}${sec('History and baseline')}<table style="font-size:12.5px">${hist}</table>${edge}${foot ? `<div style="margin-top:10px;font-size:10.5px;color:#94A3B8">${esc(foot)}</div>` : ''}</div>`;
+}
+
 const POLY_LAYERS = ['high_risk_zone', 'burnt_area', 'camera_coverage', 'plantain_farm', 'estate_boundary'];
 const CASED = new Set(['firebreak', 'standby_route']);
 const fmtProp = (k: string, v: unknown) => `<tr><td style="color:#475569;padding-right:8px">${esc(k.replace(/_/g, ' '))}</td><td><b>${esc(String(v))}</b></td></tr>`;
@@ -546,33 +616,15 @@ export class MapController {
     for (const c of s.compartments) {
       const r = RISK[c.risk_class] ?? RISK.moderate;
       L.geoJSON(c.geojson as any, { style: { color: CASING, weight: r.w + 2.6, opacity: 0.6, fill: false }, interactive: false } as any).addTo(this.g.compartments);
-      const info = () => {
-          const p = (c.props ?? {}) as Record<string, unknown>;
-          const rows = [
-            p.area_ha != null && fmtProp('area', `${p.area_ha} ha`),
-            p.yop_youngest != null && fmtProp('planted', `${p.yop_youngest}${p.yop_oldest != null && p.yop_oldest !== p.yop_youngest ? ` (oldest ${p.yop_oldest})` : ''}`),
-            fmtProp('planning baseline (2025 FMP zones)', `${r.label}${c.risk_score != null ? ` (${c.risk_score})` : ''}`),
-            p.hrz_overlap_pct != null && fmtProp('in FMP high-risk zone', `${p.hrz_overlap_pct}%`),
-            p.burnt_2024_field_ha != null && fmtProp('burnt 2024 (field)', `${p.burnt_2024_field_ha} ha`),
-            p.burnt_2023_24_s2_ha != null && fmtProp('burnt 2023/24 (Sentinel-2)', `${p.burnt_2023_24_s2_ha} ha`),
-            p.burnt_2025_26_s2_ha != null && fmtProp('burnt 2025/26 (Sentinel-2)', `${p.burnt_2025_26_s2_ha} ha`),
-            c.treatment_status && fmtProp('treatment', c.treatment_status),
-            c.edge && fmtProp('estate edge', `${((c.edge_length_m ?? 0) / 1000).toFixed(1)} km`),
-            // (a share with no check points comes back empty from the server: that is 0%, not unknown)
-            ...drynessRows(s, c.code),
-            c.edge && c.edge_checked_at && fmtProp('edge with no mapped barrier', `${c.edge_gap_pct ?? 0}%`),
-            c.edge && c.edge_checked_at && fmtProp('edge with only unverified barriers', `${c.edge_uncertain_pct ?? 0}%`),
-            c.edge && c.edge_checked_at && fmtProp('edge with a checked barrier', `${c.edge_protected_pct ?? 0}%`),
-          ].filter(Boolean).join('');
-          return `<b>${esc(c.code)}</b> · ${esc(c.block)}${riskHtml(this.ratings(this.last?.s ?? s).get(c.code))}<table style="margin-top:4px;font-size:12px">${rows}</table>${p.risk_basis ? `<div style="margin-top:4px;font-size:11px;color:#475569">Risk basis: ${esc(String(p.risk_basis))}</div>` : ''}`;
-      };
+      const info = () => compartmentCard(c, (c.props ?? {}) as Record<string, unknown>,
+        this.ratings(this.last?.s ?? s).get(c.code), `${r.label}${c.risk_score != null ? ` (${c.risk_score})` : ''}`);
       // A tap inside a compartment shows its details, unless the screen is placing something
       // (fire pin, measuring, moving a pin): then the tap goes to the screen like any map tap.
       L.geoJSON(c.geojson as any, { style: { color: r.c, weight: r.w, opacity: 1, fillColor: r.c, fillOpacity: r.f }, bubblingMouseEvents: false } as any)
         .bindTooltip(esc(`${c.code} · baseline ${r.label}`), { permanent: false, direction: 'center' })
         .on('click', (e: L.LeafletMouseEvent) => {
           if (this.pick && this.clickHandler) this.clickHandler(e);
-          else L.popup().setLatLng(e.latlng).setContent(info()).openOn(this.map);
+          else L.popup({ maxWidth: 330, minWidth: 260, maxHeight: Math.round(window.innerHeight * 0.55), autoPanPaddingTopLeft: L.point(12, 150), autoPanPaddingBottomRight: L.point(12, 190) }).setLatLng(e.latlng).setContent(info()).openOn(this.map);
         })
         .addTo(this.g.compartments);
     }
